@@ -1,0 +1,12 @@
+fastapi
+uvicorn[standard]
+python-multipart
+torch
+torchvision
+pillow
+numpy
+supervision
+pydantic
+pydantic-settings
+rfdetr
+python-dotenv
