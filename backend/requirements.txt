@@ -10,3 +10,5 @@ pydantic
 pydantic-settings
 rfdetr
 python-dotenv
+pyyaml
+scipy
