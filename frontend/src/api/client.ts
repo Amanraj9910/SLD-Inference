@@ -56,4 +56,9 @@ export const api = {
       })
       .then(r => r.data);
   },
+
+  /** Fetch live server logs for debugging */
+  getLogs(lines = 100): Promise<{ logs: string }> {
+    return http.get<{ logs: string }>(`/logs?lines=${lines}`).then(r => r.data);
+  },
 };

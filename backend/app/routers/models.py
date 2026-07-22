@@ -11,16 +11,18 @@ from app.models import registry
 from app.schemas import ModelInfo, UpdateConfigRequest
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/api/models", tags=["models"])
+router = APIRouter(tags=["models"])
 
 
-@router.get("", response_model=list[ModelInfo])
+@router.get("/models", response_model=list[ModelInfo])
+@router.get("/api/models", response_model=list[ModelInfo])
 def list_models() -> list[ModelInfo]:
     """Return all discovered checkpoints and their current config."""
     return registry.scan()
 
 
-@router.post("/{model_id}/load", response_model=ModelInfo)
+@router.post("/models/{model_id}/load", response_model=ModelInfo)
+@router.post("/api/models/{model_id}/load", response_model=ModelInfo)
 def load_model(model_id: str) -> ModelInfo:
     """
     Eagerly load a checkpoint into GPU memory.
@@ -43,7 +45,8 @@ def load_model(model_id: str) -> ModelInfo:
     return info
 
 
-@router.put("/{model_id}/config", response_model=ModelInfo)
+@router.put("/models/{model_id}/config", response_model=ModelInfo)
+@router.put("/api/models/{model_id}/config", response_model=ModelInfo)
 def update_config(model_id: str, body: UpdateConfigRequest) -> ModelInfo:
     """
     Live-edit class names and/or confidence threshold for a model.

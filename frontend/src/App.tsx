@@ -1,8 +1,9 @@
-import React, { useCallback, useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useAppStore } from './store/appStore';
 import { ModelPanel } from './components/ModelPanel';
 import { ImageCanvas } from './components/ImageCanvas';
 import { ClassConfigModal } from './components/ClassConfigModal';
+import { LogsModal } from './components/LogsModal';
 import { Legend } from './components/Legend';
 import {
   Eye,
@@ -12,6 +13,7 @@ import {
   Loader2,
   AlertCircle,
   Zap,
+  Terminal,
 } from 'lucide-react';
 
 export default function App() {
@@ -29,6 +31,7 @@ export default function App() {
   } = useAppStore();
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [logsOpen, setLogsOpen] = useState(false);
 
   // Fetch models on mount
   useEffect(() => {
@@ -83,6 +86,19 @@ export default function App() {
         >
           {showLabels ? <Eye size={14} /> : <EyeOff size={14} />}
           <span>{showLabels ? 'Labels On' : 'Labels Off'}</span>
+        </button>
+
+        {/* Server logs button */}
+        <button
+          onClick={() => setLogsOpen(true)}
+          className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg
+                     border border-slate-700/50 bg-slate-800/30
+                     text-slate-400 hover:text-cyan-300 hover:border-cyan-500/40
+                     transition-all"
+          title="View live backend server logs"
+        >
+          <Terminal size={14} className="text-cyan-400" />
+          <span>Server Logs</span>
         </button>
 
         {/* Upload button */}
@@ -162,9 +178,17 @@ export default function App() {
 
           {/* Error banner */}
           {inferError && (
-            <div className="flex items-center gap-2 bg-red-500/10 border border-red-500/30 rounded-lg px-4 py-2.5 text-xs text-red-300 fade-in">
-              <AlertCircle size={14} className="shrink-0" />
-              <span>{inferError}</span>
+            <div className="flex items-center justify-between bg-red-500/10 border border-red-500/30 rounded-lg px-4 py-2.5 text-xs text-red-300 fade-in">
+              <div className="flex items-center gap-2">
+                <AlertCircle size={14} className="shrink-0" />
+                <span>{inferError}</span>
+              </div>
+              <button
+                onClick={() => setLogsOpen(true)}
+                className="underline hover:text-white font-medium text-[11px] shrink-0 ml-2"
+              >
+                View Backend Logs
+              </button>
             </div>
           )}
 
@@ -173,8 +197,9 @@ export default function App() {
         </main>
       </div>
 
-      {/* ── Config modal ──────────────────────────────────────────────── */}
+      {/* ── Modals ────────────────────────────────────────────────────── */}
       <ClassConfigModal />
+      <LogsModal isOpen={logsOpen} onClose={() => setLogsOpen(false)} />
     </div>
   );
 }

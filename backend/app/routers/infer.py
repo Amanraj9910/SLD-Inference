@@ -21,10 +21,11 @@ from app.schemas import Detection, InferRequest, InferResponse, ModelDetections
 from app.tiling import merge_detections, tile_image
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/api/infer", tags=["infer"])
+router = APIRouter(tags=["infer"])
 
 
-@router.post("", response_model=InferResponse)
+@router.post("/infer", response_model=InferResponse)
+@router.post("/api/infer", response_model=InferResponse)
 async def run_infer(
     image: UploadFile = File(..., description="SLD image (JPEG or PNG)"),
     body: str = Form(..., description="JSON string matching InferRequest"),
