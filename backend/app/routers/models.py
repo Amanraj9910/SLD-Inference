@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+import shutil
 from pathlib import Path
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
@@ -98,12 +99,11 @@ async def upload_model(
     target_dir = weights_base / clean_id
     target_dir.mkdir(parents=True, exist_ok=True)
 
-    # Save .pth file
+    # Save .pth file using shutil.copyfileobj (guarantees complete byte-for-byte stream)
     weights_path = target_dir / file.filename
     try:
         with open(weights_path, "wb") as f:
-            while chunk := await file.read(1024 * 1024):
-                f.write(chunk)
+            shutil.copyfileobj(file.file, f)
     except Exception as exc:
         logger.exception("Failed to write weight file %s", weights_path)
         raise HTTPException(status_code=500, detail=f"Failed to save weight file: {exc}")
