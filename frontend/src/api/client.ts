@@ -61,4 +61,40 @@ export const api = {
   getLogs(lines = 100): Promise<{ logs: string }> {
     return http.get<{ logs: string }>(`/logs?lines=${lines}`).then(r => r.data);
   },
+
+  /** Upload a new model checkpoint (.pth) and metadata manifest */
+  uploadModel(params: {
+    file: File;
+    arch: 'dfine' | 'rfdetr';
+    displayName: string;
+    numClasses: number;
+    classNames: string[];
+    resolution: number;
+    confidenceDefault: number;
+    gridSize: number;
+    overlap: number;
+    modelId?: string;
+  }): Promise<ModelInfo> {
+    const form = new FormData();
+    form.append('file', params.file);
+    form.append(
+      'manifest',
+      JSON.stringify({
+        arch: params.arch,
+        display_name: params.displayName,
+        num_classes: params.numClasses,
+        class_names: params.classNames,
+        resolution: params.resolution,
+        confidence_default: params.confidenceDefault,
+        grid_size: params.gridSize,
+        overlap: params.overlap,
+        model_id: params.modelId,
+      })
+    );
+    return http
+      .post<ModelInfo>('/models/upload', form, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      })
+      .then(r => r.data);
+  },
 };

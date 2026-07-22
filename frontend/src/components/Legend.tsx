@@ -27,17 +27,17 @@ export function Legend() {
   if (items.length === 0) return null;
 
   return (
-    <div className="glass rounded-xl px-4 py-2.5 flex flex-wrap gap-x-4 gap-y-1.5 items-center">
-      <span className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold mr-1">
+    <div className="glass rounded-2xl px-5 py-3 flex flex-wrap gap-x-5 gap-y-2 items-center bg-white border border-slate-200/80 shadow-sm">
+      <span className="text-[10px] uppercase tracking-wider text-slate-400 font-bold mr-1">
         Legend
       </span>
       {items.map(({ classId, name }) => (
-        <div key={classId} className="flex items-center gap-1.5">
+        <div key={classId} className="flex items-center gap-2">
           <span
-            className="inline-block w-2.5 h-2.5 rounded-sm"
+            className="inline-block w-3 h-3 rounded-full shadow-sm"
             style={{ backgroundColor: classColor(classId) }}
           />
-          <span className="text-[11px] text-slate-400">{name}</span>
+          <span className="text-xs font-semibold text-slate-700">{name}</span>
         </div>
       ))}
     </div>

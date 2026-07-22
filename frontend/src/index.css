@@ -9,52 +9,45 @@
 
 body {
   font-family: 'Inter', system-ui, sans-serif;
-  background-color: #0b1120;
-  color: #e2e8f0;
+  background-color: #f8fafc;
+  color: #0f172a;
   min-height: 100vh;
   -webkit-font-smoothing: antialiased;
 }
 
 /* ── Scrollbar ───────────────────────────────────────────────────────────── */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
-::-webkit-scrollbar-track { background: #1e293b; }
-::-webkit-scrollbar-thumb { background: #334155; border-radius: 9999px; }
-::-webkit-scrollbar-thumb:hover { background: #475569; }
+::-webkit-scrollbar-track { background: #f1f5f9; }
+::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 9999px; }
+::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
 
-/* ── Glass panel ─────────────────────────────────────────────────────────── */
+/* ── Glass panel (Minimalist Light) ──────────────────────────────────────── */
 .glass {
-  background: rgba(15, 23, 42, 0.75);
+  background: rgba(255, 255, 255, 0.85);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(99, 102, 241, 0.15);
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05), 0 1px 2px -1px rgba(0, 0, 0, 0.05);
 }
 
-/* ── Gradient accent border ──────────────────────────────────────────────── */
+/* ── Accent border ──────────────────────────────────────────────────────── */
 .accent-border {
-  border-image: linear-gradient(135deg, #6366f1, #06b6d4) 1;
+  border-image: linear-gradient(135deg, #4f46e5, #0284c7) 1;
 }
 
-/* ── Animated gradient text ──────────────────────────────────────────────── */
+/* ── Gradient text ──────────────────────────────────────────────────────── */
 .gradient-text {
-  background: linear-gradient(135deg, #818cf8, #38bdf8, #34d399);
-  background-size: 200% auto;
+  background: linear-gradient(135deg, #1e293b, #4338ca);
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
-  animation: gradientShift 4s ease infinite;
-}
-
-@keyframes gradientShift {
-  0%   { background-position: 0% center; }
-  50%  { background-position: 100% center; }
-  100% { background-position: 0% center; }
 }
 
 /* ── Spinner ─────────────────────────────────────────────────────────────── */
 .spinner {
   width: 36px; height: 36px;
-  border: 3px solid rgba(99,102,241,0.2);
-  border-top-color: #6366f1;
+  border: 3px solid rgba(79, 70, 229, 0.15);
+  border-top-color: #4f46e5;
   border-radius: 50%;
   animation: spin 0.75s linear infinite;
 }
@@ -67,7 +60,7 @@ input[type="range"] {
   appearance: none;
   height: 4px;
   border-radius: 9999px;
-  background: #1e293b;
+  background: #e2e8f0;
   outline: none;
   cursor: pointer;
 }
@@ -75,11 +68,11 @@ input[type="range"]::-webkit-slider-thumb {
   -webkit-appearance: none;
   width: 14px; height: 14px;
   border-radius: 50%;
-  background: #6366f1;
-  box-shadow: 0 0 6px rgba(99,102,241,0.6);
+  background: #4f46e5;
+  box-shadow: 0 1px 4px rgba(79, 70, 229, 0.4);
   transition: transform 0.15s;
 }
-input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.3); }
+input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.25); }
 
 /* ── Toggle switch ───────────────────────────────────────────────────────── */
 .toggle {
@@ -90,7 +83,7 @@ input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.3); }
 .toggle input { opacity: 0; width: 0; height: 0; }
 .toggle-slider {
   position: absolute; inset: 0;
-  background: #334155;
+  background: #cbd5e1;
   border-radius: 9999px;
   transition: background 0.2s;
 }
@@ -100,21 +93,22 @@ input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.3); }
   width: 14px; height: 14px;
   background: white;
   border-radius: 50%;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.15);
   transition: transform 0.2s;
 }
-.toggle input:checked + .toggle-slider { background: #6366f1; }
+.toggle input:checked + .toggle-slider { background: #4f46e5; }
 .toggle input:checked + .toggle-slider::before { transform: translateX(16px); }
 
 /* ── Drop zone animation ─────────────────────────────────────────────────── */
 @keyframes borderPulse {
-  0%, 100% { border-color: rgba(99,102,241,0.4); }
-  50%       { border-color: rgba(99,102,241,0.9); }
+  0%, 100% { border-color: rgba(99,102,241,0.3); }
+  50%       { border-color: rgba(99,102,241,0.8); }
 }
 .drop-zone-active { animation: borderPulse 1.2s ease infinite; }
 
 /* ── Fade in ─────────────────────────────────────────────────────────────── */
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(6px); }
+  from { opacity: 0; transform: translateY(4px); }
   to   { opacity: 1; transform: translateY(0); }
 }
-.fade-in { animation: fadeIn 0.25s ease forwards; }
+.fade-in { animation: fadeIn 0.2s ease forwards; }

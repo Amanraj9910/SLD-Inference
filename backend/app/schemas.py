@@ -34,6 +34,20 @@ class UpdateConfigRequest(BaseModel):
     confidence_default: float | None = None
 
 
+class UploadModelManifest(BaseModel):
+    """Metadata attached to model upload requests."""
+    arch: str                          # "dfine" | "rfdetr"
+    display_name: str
+    num_classes: int
+    class_names: list[str]
+    resolution: int = 640
+    confidence_default: float = 0.20
+    grid_size: int = 4
+    overlap: float = 0.20
+    iou_threshold: float = 0.50
+    model_id: str | None = None
+
+
 # ---------------------------------------------------------------------------
 # Inference schemas
 # ---------------------------------------------------------------------------

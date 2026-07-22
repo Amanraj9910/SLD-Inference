@@ -10,6 +10,7 @@ import {
   Cpu,
   ChevronDown,
   ChevronRight,
+  Plus,
 } from 'lucide-react';
 
 export function ModelPanel() {
@@ -24,6 +25,7 @@ export function ModelPanel() {
     toggleModelVisible,
     loadModel,
     openConfigModal,
+    openUploadModal,
     inferSettings,
     setInferSettings,
   } = useAppStore();
@@ -47,17 +49,27 @@ export function ModelPanel() {
   };
 
   return (
-    <aside className="w-72 glass rounded-xl p-4 flex flex-col gap-4 overflow-y-auto">
+    <aside className="w-72 glass rounded-2xl p-4 flex flex-col gap-4 overflow-y-auto bg-white border border-slate-200/80 shadow-sm">
       {/* Header */}
-      <div>
-        <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-400">
-          Models
-        </h2>
-        {modelsLoading && (
-          <div className="flex items-center gap-2 mt-2 text-xs text-slate-500">
-            <Loader2 size={14} className="animate-spin" /> Scanning weights…
-          </div>
-        )}
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-xs font-bold uppercase tracking-wider text-slate-400">
+            Models
+          </h2>
+          {modelsLoading && (
+            <div className="flex items-center gap-1.5 mt-1 text-xs text-slate-500 font-medium">
+              <Loader2 size={12} className="animate-spin" /> Scanning…
+            </div>
+          )}
+        </div>
+
+        <button
+          onClick={openUploadModal}
+          className="flex items-center gap-1 text-xs font-semibold text-indigo-600 hover:text-indigo-700 bg-indigo-50 hover:bg-indigo-100/80 px-2.5 py-1 rounded-lg transition-all border border-indigo-200/60 shadow-sm"
+          title="Upload a new .pth model checkpoint & manifest"
+        >
+          <Plus size={14} /> Add Model
+        </button>
       </div>
 
       {/* Model list */}
@@ -72,24 +84,24 @@ export function ModelPanel() {
           return (
             <div
               key={model.model_id}
-              className={`rounded-lg border transition-all duration-200 ${
+              className={`rounded-xl border transition-all duration-200 shadow-sm ${
                 !hasWeights
-                  ? 'border-red-900/40 bg-red-950/10 opacity-75'
+                  ? 'border-red-200 bg-red-50/30'
                   : selected
-                  ? 'border-indigo-500/50 bg-indigo-500/5'
-                  : 'border-slate-700/50 bg-slate-800/30'
+                  ? 'border-indigo-500/60 bg-indigo-50/40 ring-1 ring-indigo-500/20'
+                  : 'border-slate-200 bg-white hover:border-slate-300'
               }`}
             >
               {/* Top row: checkbox, name, buttons */}
-              <div className="flex items-center gap-2 p-3">
+              <div className="flex items-center gap-2.5 p-3">
                 {/* Select checkbox */}
                 <button
                   onClick={() => hasWeights && toggleModelSelected(model.model_id)}
                   disabled={!hasWeights}
                   className={`transition-colors shrink-0 ${
                     !hasWeights
-                      ? 'text-slate-600 cursor-not-allowed'
-                      : 'text-slate-400 hover:text-indigo-400'
+                      ? 'text-slate-300 cursor-not-allowed'
+                      : 'text-slate-400 hover:text-indigo-600'
                   }`}
                   title={
                     !hasWeights
@@ -100,7 +112,7 @@ export function ModelPanel() {
                   }
                 >
                   {selected ? (
-                    <CheckSquare size={18} className="text-indigo-400" />
+                    <CheckSquare size={18} className="text-indigo-600" />
                   ) : (
                     <Square size={18} />
                   )}
@@ -108,27 +120,27 @@ export function ModelPanel() {
 
                 {/* Name + arch badge */}
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-slate-200 truncate">
+                  <p className="text-xs font-semibold text-slate-800 truncate">
                     {model.display_name}
                   </p>
-                  <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                  <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
                     <span
-                      className={`text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded ${
+                      className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded border ${
                         model.arch === 'dfine'
-                          ? 'bg-cyan-500/15 text-cyan-400'
-                          : 'bg-amber-500/15 text-amber-400'
+                          ? 'bg-cyan-50 text-cyan-700 border-cyan-200'
+                          : 'bg-amber-50 text-amber-700 border-amber-200'
                       }`}
                     >
                       {model.arch}
                     </span>
                     {hasWeights ? (
                       model.loaded ? (
-                        <span className="text-[10px] text-emerald-400">● GPU Loaded</span>
+                        <span className="text-[10px] font-semibold text-emerald-600">● GPU</span>
                       ) : (
-                        <span className="text-[10px] text-slate-500">Ready</span>
+                        <span className="text-[10px] text-slate-400">Ready</span>
                       )
                     ) : (
-                      <span className="text-[10px] text-red-400 bg-red-500/10 px-1 rounded border border-red-500/20" title={`Missing ${model.weights_file}`}>
+                      <span className="text-[9px] font-semibold text-red-600 bg-red-50 px-1 py-0.5 rounded border border-red-200" title={`Missing ${model.weights_file}`}>
                         Missing .pth
                       </span>
                     )}
@@ -138,7 +150,7 @@ export function ModelPanel() {
                 {/* Eye toggle */}
                 <button
                   onClick={() => toggleModelVisible(model.model_id)}
-                  className="text-slate-500 hover:text-slate-300 transition-colors shrink-0"
+                  className="text-slate-400 hover:text-slate-600 transition-colors shrink-0"
                   title={visible ? 'Hide detections' : 'Show detections'}
                 >
                   {visible ? <Eye size={16} /> : <EyeOff size={16} />}
@@ -147,7 +159,7 @@ export function ModelPanel() {
                 {/* Config gear */}
                 <button
                   onClick={() => openConfigModal(model.model_id)}
-                  className="text-slate-500 hover:text-slate-300 transition-colors shrink-0"
+                  className="text-slate-400 hover:text-slate-600 transition-colors shrink-0"
                   title="Edit class names / threshold"
                 >
                   <Settings size={16} />
@@ -156,21 +168,21 @@ export function ModelPanel() {
 
               {/* Expanded controls when selected */}
               {selected && (
-                <div className="px-3 pb-3 space-y-2 fade-in">
+                <div className="px-3 pb-3 space-y-2.5 fade-in border-t border-slate-100 pt-2.5">
                   {/* Load button */}
                   {!model.loaded && (
                     <button
                       onClick={() => handleLoad(model.model_id)}
                       disabled={isLoading || !hasWeights}
-                      className="w-full flex items-center justify-center gap-2 text-xs font-medium
-                                 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300
-                                 border border-indigo-500/30 rounded-md py-1.5
-                                 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="w-full flex items-center justify-center gap-2 text-xs font-semibold
+                                 bg-indigo-50 hover:bg-indigo-100 text-indigo-700
+                                 border border-indigo-200 rounded-lg py-1.5
+                                 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
                     >
                       {isLoading ? (
-                        <Loader2 size={14} className="animate-spin" />
+                        <Loader2 size={13} className="animate-spin" />
                       ) : (
-                        <Cpu size={14} />
+                        <Cpu size={13} />
                       )}
                       {isLoading
                         ? 'Loading…'
@@ -183,8 +195,8 @@ export function ModelPanel() {
                   {/* Threshold slider */}
                   <div className="space-y-1">
                     <div className="flex items-center justify-between">
-                      <span className="text-[11px] text-slate-500">Confidence</span>
-                      <span className="text-[11px] text-slate-400 tabular-nums font-medium">
+                      <span className="text-[11px] font-medium text-slate-500">Confidence</span>
+                      <span className="text-[11px] text-slate-700 tabular-nums font-semibold">
                         {(threshold * 100).toFixed(0)}%
                       </span>
                     </div>
@@ -207,27 +219,27 @@ export function ModelPanel() {
         })}
 
         {models.length === 0 && !modelsLoading && (
-          <p className="text-xs text-slate-600 text-center py-4">
+          <p className="text-xs text-slate-400 text-center py-4">
             No models found in weights/
           </p>
         )}
       </div>
 
       {/* Inference settings */}
-      <div className="mt-auto border-t border-slate-700/50 pt-3">
+      <div className="mt-auto border-t border-slate-200/80 pt-3">
         <button
           onClick={() => setSettingsOpen(!settingsOpen)}
-          className="flex items-center gap-1 text-xs text-slate-500 hover:text-slate-300 transition-colors"
+          className="flex items-center gap-1 text-xs font-semibold text-slate-500 hover:text-slate-800 transition-colors"
         >
           {settingsOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
           Tiling Settings
         </button>
 
         {settingsOpen && (
-          <div className="mt-2 space-y-2 fade-in">
+          <div className="mt-2.5 space-y-2.5 fade-in bg-slate-50 p-2.5 rounded-xl border border-slate-200/60">
             {/* Use tiling toggle */}
             <div className="flex items-center justify-between">
-              <span className="text-[11px] text-slate-500">Use Tiling</span>
+              <span className="text-[11px] font-medium text-slate-600">Use Tiling</span>
               <label className="toggle">
                 <input
                   type="checkbox"
@@ -245,8 +257,8 @@ export function ModelPanel() {
                 {/* Grid size */}
                 <div className="space-y-1">
                   <div className="flex items-center justify-between">
-                    <span className="text-[11px] text-slate-500">Grid</span>
-                    <span className="text-[11px] text-slate-400 tabular-nums font-medium">
+                    <span className="text-[11px] text-slate-500">Grid Size</span>
+                    <span className="text-[11px] text-slate-700 tabular-nums font-semibold">
                       {inferSettings.gridSize}×{inferSettings.gridSize}
                     </span>
                   </div>
@@ -267,7 +279,7 @@ export function ModelPanel() {
                 <div className="space-y-1">
                   <div className="flex items-center justify-between">
                     <span className="text-[11px] text-slate-500">Overlap</span>
-                    <span className="text-[11px] text-slate-400 tabular-nums font-medium">
+                    <span className="text-[11px] text-slate-700 tabular-nums font-semibold">
                       {(inferSettings.overlap * 100).toFixed(0)}%
                     </span>
                   </div>

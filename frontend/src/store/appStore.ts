@@ -85,6 +85,12 @@ interface AppState {
   configModalModelId: string | null;
   openConfigModal: (modelId: string) => void;
   closeConfigModal: () => void;
+
+  // Upload model modal
+  uploadModalOpen: boolean;
+  openUploadModal: () => void;
+  closeUploadModal: () => void;
+  uploadModel: (params: Parameters<typeof api.uploadModel>[0]) => Promise<void>;
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -212,4 +218,19 @@ export const useAppStore = create<AppState>((set, get) => ({
   configModalModelId: null,
   openConfigModal: (modelId: string) => set({ configModalModelId: modelId }),
   closeConfigModal: () => set({ configModalModelId: null }),
+
+  // ── Upload model modal ───────────────────────────────────────────────────
+  uploadModalOpen: false,
+  openUploadModal: () => set({ uploadModalOpen: true }),
+  closeUploadModal: () => set({ uploadModalOpen: false }),
+
+  uploadModel: async params => {
+    const newModel = await api.uploadModel(params);
+    await get().fetchModels();
+    set(state => {
+      const nextSelected = new Set(state.selectedModelIds);
+      nextSelected.add(newModel.model_id);
+      return { selectedModelIds: nextSelected, uploadModalOpen: false };
+    });
+  },
 }));

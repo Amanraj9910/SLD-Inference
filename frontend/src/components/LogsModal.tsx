@@ -34,23 +34,23 @@ export function LogsModal({ isOpen, onClose }: LogsModalProps) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-md"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm"
       onClick={onClose}
     >
       <div
-        className="glass rounded-2xl w-full max-w-4xl max-h-[85vh] mx-4 flex flex-col fade-in shadow-2xl overflow-hidden border border-slate-700/60"
+        className="glass rounded-2xl w-full max-w-4xl max-h-[85vh] mx-4 flex flex-col fade-in shadow-xl overflow-hidden bg-white border border-slate-200"
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-700/50 bg-slate-900/50">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50/80">
           <div className="flex items-center gap-2.5">
-            <Terminal size={20} className="text-cyan-400" />
+            <Terminal size={18} className="text-slate-700" />
             <div>
-              <h3 className="text-base font-semibold text-slate-100">
+              <h3 className="text-sm font-bold text-slate-900">
                 Backend Server Logs
               </h3>
-              <p className="text-xs text-slate-400">
-                Live output from <code className="font-mono text-cyan-300">backend.log</code>
+              <p className="text-xs text-slate-500">
+                Output from <code className="font-mono text-slate-700 font-semibold">backend.log</code>
               </p>
             </div>
           </div>
@@ -59,22 +59,22 @@ export function LogsModal({ isOpen, onClose }: LogsModalProps) {
             <button
               onClick={fetchLogs}
               disabled={loading}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors disabled:opacity-50"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 transition-all shadow-sm disabled:opacity-50"
             >
-              <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+              <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
               <span>Refresh</span>
             </button>
             <button
               onClick={onClose}
-              className="text-slate-400 hover:text-slate-200 transition-colors"
+              className="text-slate-400 hover:text-slate-600 transition-colors"
             >
               <X size={20} />
             </button>
           </div>
         </div>
 
-        {/* Log Viewer Content */}
-        <div className="flex-1 p-6 overflow-y-auto font-mono text-xs text-slate-300 bg-slate-950/80 leading-relaxed whitespace-pre-wrap selection:bg-cyan-500/30 selection:text-white">
+        {/* Log Viewer Content (Dark terminal viewport inside white modal) */}
+        <div className="flex-1 p-6 overflow-y-auto font-mono text-xs text-slate-200 bg-slate-900 leading-relaxed whitespace-pre-wrap selection:bg-indigo-500/30 selection:text-white">
           {logs}
         </div>
       </div>
