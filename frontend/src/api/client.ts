@@ -94,6 +94,7 @@ export const api = {
     return http
       .post<ModelInfo>('/models/upload', form, {
         headers: { 'Content-Type': 'multipart/form-data' },
+        timeout: 600_000,
       })
       .then(r => r.data);
   },
