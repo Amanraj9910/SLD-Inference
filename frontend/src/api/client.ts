@@ -98,4 +98,9 @@ export const api = {
       })
       .then(r => r.data);
   },
+
+  /** Delete a model checkpoint and directory */
+  deleteModel(modelId: string): Promise<{ status: string }> {
+    return http.delete<{ status: string }>(`/models/${modelId}`).then(r => r.data);
+  },
 };

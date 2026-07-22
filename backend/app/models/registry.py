@@ -79,7 +79,8 @@ def scan() -> list[ModelInfo]:
     for model_id, weights_subdir, manifest in _manifest_iter(weights_dir):
         _manifests[model_id] = manifest
         weights_file = manifest.get("weights_file", "")
-        weights_exist = (weights_subdir / weights_file).is_file() if weights_file else False
+        weights_path = weights_subdir / weights_file if weights_file else None
+        weights_exist = bool(weights_path and weights_path.is_file() and weights_path.stat().st_size > 1024 * 10)
 
         results.append(
             ModelInfo(
@@ -177,7 +178,8 @@ def update_manifest(
         _registry[model_id].manifest = manifest
 
     weights_file = manifest.get("weights_file", "")
-    weights_exist = (weights_subdir / weights_file).is_file() if weights_file else False
+    weights_path = weights_subdir / weights_file if weights_file else None
+    weights_exist = bool(weights_path and weights_path.is_file() and weights_path.stat().st_size > 1024 * 10)
 
     return ModelInfo(
         model_id=model_id,
@@ -194,3 +196,24 @@ def update_manifest(
         loaded=model_id in _registry,
         weights_exist=weights_exist,
     )
+
+
+def delete_model(model_id: str) -> None:
+    """Delete a model's subfolder from weights/ and uncache it."""
+    if model_id in _registry:
+        del _registry[model_id]
+
+    if not _manifests:
+        scan()
+
+    if model_id in _manifests:
+        manifest = _manifests[model_id]
+        weights_subdir = Path(manifest["_weights_subdir"])
+        if weights_subdir.exists():
+            import shutil
+            shutil.rmtree(weights_subdir, ignore_errors=True)
+        del _manifests[model_id]
+        logger.info("Model '%s' directory removed from disk.", model_id)
+
+    scan()
+

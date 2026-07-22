@@ -52,6 +52,7 @@ interface AppState {
     modelId: string,
     patch: { class_names?: string[]; confidence_default?: number }
   ) => Promise<void>;
+  deleteModel: (modelId: string) => Promise<void>;
 
   // Selection
   selectedModelIds: Set<string>;
@@ -137,6 +138,16 @@ export const useAppStore = create<AppState>((set, get) => ({
           ? { ...state.thresholds, [modelId]: patch.confidence_default }
           : state.thresholds,
     }));
+  },
+
+  deleteModel: async (modelId: string) => {
+    await api.deleteModel(modelId);
+    await get().fetchModels();
+    set(state => {
+      const nextSelected = new Set(state.selectedModelIds);
+      nextSelected.delete(modelId);
+      return { selectedModelIds: nextSelected };
+    });
   },
 
   // ── Selection ────────────────────────────────────────────────────────────

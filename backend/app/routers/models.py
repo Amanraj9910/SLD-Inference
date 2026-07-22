@@ -138,3 +138,16 @@ async def upload_model(
         raise HTTPException(status_code=500, detail="Model uploaded but scan failed to locate it.")
     return info
 
+
+@router.delete("/models/{model_id}")
+@router.delete("/api/models/{model_id}")
+def delete_model(model_id: str) -> dict:
+    """Delete a model directory from weights/ and clear it from memory."""
+    try:
+        registry.delete_model(model_id)
+        return {"status": "ok", "message": f"Model '{model_id}' deleted successfully."}
+    except Exception as exc:
+        logger.exception("Failed to delete model '%s'", model_id)
+        raise HTTPException(status_code=500, detail=str(exc))
+
+

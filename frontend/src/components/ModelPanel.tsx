@@ -11,6 +11,7 @@ import {
   ChevronDown,
   ChevronRight,
   Plus,
+  Trash2,
 } from 'lucide-react';
 
 export function ModelPanel() {
@@ -26,12 +27,14 @@ export function ModelPanel() {
     loadModel,
     openConfigModal,
     openUploadModal,
+    deleteModel,
     inferSettings,
     setInferSettings,
   } = useAppStore();
 
   const [loadingIds, setLoadingIds] = useState<Set<string>>(new Set());
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const handleLoad = async (modelId: string) => {
     setLoadingIds(prev => new Set(prev).add(modelId));
@@ -45,6 +48,18 @@ export function ModelPanel() {
         next.delete(modelId);
         return next;
       });
+    }
+  };
+
+  const handleDelete = async (modelId: string, displayName: string) => {
+    if (!confirm(`Are you sure you want to delete '${displayName}' from disk?`)) return;
+    setDeletingId(modelId);
+    try {
+      await deleteModel(modelId);
+    } catch (err) {
+      alert(`Failed to delete model: ${err}`);
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -163,6 +178,20 @@ export function ModelPanel() {
                   title="Edit class names / threshold"
                 >
                   <Settings size={16} />
+                </button>
+
+                {/* Delete button */}
+                <button
+                  onClick={() => handleDelete(model.model_id, model.display_name)}
+                  disabled={deletingId === model.model_id}
+                  className="text-slate-400 hover:text-red-600 transition-colors shrink-0 disabled:opacity-50"
+                  title="Delete checkpoint directory from server"
+                >
+                  {deletingId === model.model_id ? (
+                    <Loader2 size={16} className="animate-spin text-red-600" />
+                  ) : (
+                    <Trash2 size={16} />
+                  )}
                 </button>
               </div>
 
