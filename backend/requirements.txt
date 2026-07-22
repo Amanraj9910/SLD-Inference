@@ -12,3 +12,5 @@ rfdetr
 python-dotenv
 pyyaml
 scipy
+faster-coco-eval
+pycocotools

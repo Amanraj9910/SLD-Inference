@@ -78,6 +78,9 @@ source .venv/bin/activate
 
 pip install --upgrade pip -q
 pip install -r requirements.txt -q
+if [ -f "$DFINE_DIR/requirements.txt" ]; then
+    pip install -r "$DFINE_DIR/requirements.txt" -q
+fi
 log_success "Backend Python dependencies installed."
 
 # Configure .env file
