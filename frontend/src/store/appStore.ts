@@ -16,6 +16,7 @@ export interface ModelInfo {
   overlap: number;
   iou_threshold: number;
   loaded: boolean;
+  weights_exist: boolean;
 }
 
 export interface Detection {

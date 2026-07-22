@@ -57,7 +57,9 @@ async def run_infer(
         try:
             wrapper = registry.get_or_load(model_id)
         except KeyError:
-            raise HTTPException(status_code=404, detail=f"Model '{model_id}' not found.")
+            raise HTTPException(status_code=404, detail=f"Model '{model_id}' manifest not found.")
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
         except Exception as exc:
             logger.exception("Failed to load model '%s'", model_id)
             raise HTTPException(status_code=500, detail=f"Model load error: {exc}")

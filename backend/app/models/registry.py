@@ -70,20 +70,23 @@ def scan() -> list[ModelInfo]:
     Scan weights/ and return ModelInfo for every discovered manifest.
     Also populates the internal manifest cache (_manifests).
     """
-    weights_dir = Path(settings.weights_dir)
+    weights_dir = settings.resolved_weights_dir
     if not weights_dir.exists():
         logger.warning("weights_dir '%s' does not exist — no models discovered.", weights_dir)
         return []
 
     results: list[ModelInfo] = []
-    for model_id, _, manifest in _manifest_iter(weights_dir):
+    for model_id, weights_subdir, manifest in _manifest_iter(weights_dir):
         _manifests[model_id] = manifest
+        weights_file = manifest.get("weights_file", "")
+        weights_exist = (weights_subdir / weights_file).is_file() if weights_file else False
+
         results.append(
             ModelInfo(
                 model_id=model_id,
                 arch=manifest["arch"],
                 display_name=manifest.get("display_name", model_id),
-                weights_file=manifest["weights_file"],
+                weights_file=weights_file,
                 num_classes=manifest["num_classes"],
                 resolution=manifest.get("resolution", 640),
                 class_names=manifest.get("class_names", []),
@@ -92,6 +95,7 @@ def scan() -> list[ModelInfo]:
                 overlap=manifest.get("overlap", 0.20),
                 iou_threshold=manifest.get("iou_threshold", 0.50),
                 loaded=model_id in _registry,
+                weights_exist=weights_exist,
             )
         )
     return results
@@ -109,6 +113,7 @@ def get_or_load(model_id: str) -> BaseModelWrapper:
     """
     Return the loaded wrapper for *model_id*, loading it on first call.
     Raises KeyError if the model_id is not in any discovered manifest.
+    Raises FileNotFoundError if the .pth weight file is missing on disk.
     """
     if model_id in _registry:
         return _registry[model_id]
@@ -120,7 +125,16 @@ def get_or_load(model_id: str) -> BaseModelWrapper:
     if model_id not in _manifests:
         raise KeyError(f"Model '{model_id}' not found in weights/")
 
-    wrapper = _build_wrapper(model_id, _manifests[model_id])
+    manifest = _manifests[model_id]
+    weights_subdir = Path(manifest["_weights_subdir"])
+    weights_file = manifest.get("weights_file", "")
+    if not (weights_subdir / weights_file).is_file():
+        raise FileNotFoundError(
+            f"Checkpoint file '{weights_file}' for model '{model_id}' was not found at {weights_subdir / weights_file}. "
+            f"Please upload '{weights_file}' to the server."
+        )
+
+    wrapper = _build_wrapper(model_id, manifest)
     wrapper.load()
     _registry[model_id] = wrapper
     logger.info("Model '%s' loaded and cached.", model_id)
@@ -150,8 +164,8 @@ def update_manifest(
         manifest["confidence_default"] = confidence_default
 
     # Persist to disk
-    manifest_path = Path(manifest["_weights_subdir"]) / "manifest.json"
-    # Write only serialisable keys (strip the internal _weights_subdir key)
+    weights_subdir = Path(manifest["_weights_subdir"])
+    manifest_path = weights_subdir / "manifest.json"
     serialisable = {k: v for k, v in manifest.items() if not k.startswith("_")}
     manifest_path.write_text(
         json.dumps(serialisable, indent=2, ensure_ascii=False),
@@ -159,15 +173,17 @@ def update_manifest(
     )
     logger.info("manifest.json updated for model '%s'.", model_id)
 
-    # If already loaded, update the in-memory wrapper's manifest reference too
     if model_id in _registry:
         _registry[model_id].manifest = manifest
+
+    weights_file = manifest.get("weights_file", "")
+    weights_exist = (weights_subdir / weights_file).is_file() if weights_file else False
 
     return ModelInfo(
         model_id=model_id,
         arch=manifest["arch"],
         display_name=manifest.get("display_name", model_id),
-        weights_file=manifest["weights_file"],
+        weights_file=weights_file,
         num_classes=manifest["num_classes"],
         resolution=manifest.get("resolution", 640),
         class_names=manifest["class_names"],
@@ -176,4 +192,5 @@ def update_manifest(
         overlap=manifest.get("overlap", 0.20),
         iou_threshold=manifest.get("iou_threshold", 0.50),
         loaded=model_id in _registry,
+        weights_exist=weights_exist,
     )

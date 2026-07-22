@@ -26,5 +26,13 @@ class Settings(BaseSettings):
     # CORS origins — "*" is fine for single-box Option A deploy
     cors_origins: list[str] = ["*"]
 
+    @property
+    def resolved_weights_dir(self) -> Path:
+        p = Path(self.weights_dir)
+        if not p.is_absolute():
+            backend_dir = Path(__file__).resolve().parent.parent
+            p = (backend_dir / p).resolve()
+        return p
+
 
 settings = Settings()

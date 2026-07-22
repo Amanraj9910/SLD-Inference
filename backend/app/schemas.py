@@ -25,6 +25,7 @@ class ModelInfo(BaseModel):
     overlap: float = 0.20
     iou_threshold: float = 0.50
     loaded: bool = False                # True once the GPU model is in memory
+    weights_exist: bool = True          # True if the .pth file actually exists on disk
 
 
 class UpdateConfigRequest(BaseModel):

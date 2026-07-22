@@ -67,12 +67,15 @@ export function ModelPanel() {
           const visible = visibleModels[model.model_id] ?? true;
           const threshold = thresholds[model.model_id] ?? model.confidence_default;
           const isLoading = loadingIds.has(model.model_id);
+          const hasWeights = model.weights_exist ?? true;
 
           return (
             <div
               key={model.model_id}
               className={`rounded-lg border transition-all duration-200 ${
-                selected
+                !hasWeights
+                  ? 'border-red-900/40 bg-red-950/10 opacity-75'
+                  : selected
                   ? 'border-indigo-500/50 bg-indigo-500/5'
                   : 'border-slate-700/50 bg-slate-800/30'
               }`}
@@ -81,9 +84,20 @@ export function ModelPanel() {
               <div className="flex items-center gap-2 p-3">
                 {/* Select checkbox */}
                 <button
-                  onClick={() => toggleModelSelected(model.model_id)}
-                  className="text-slate-400 hover:text-indigo-400 transition-colors shrink-0"
-                  title={selected ? 'Deselect model' : 'Select model'}
+                  onClick={() => hasWeights && toggleModelSelected(model.model_id)}
+                  disabled={!hasWeights}
+                  className={`transition-colors shrink-0 ${
+                    !hasWeights
+                      ? 'text-slate-600 cursor-not-allowed'
+                      : 'text-slate-400 hover:text-indigo-400'
+                  }`}
+                  title={
+                    !hasWeights
+                      ? `Upload ${model.weights_file} to backend/weights/${model.arch}/ to enable`
+                      : selected
+                      ? 'Deselect model'
+                      : 'Select model'
+                  }
                 >
                   {selected ? (
                     <CheckSquare size={18} className="text-indigo-400" />
@@ -97,7 +111,7 @@ export function ModelPanel() {
                   <p className="text-sm font-medium text-slate-200 truncate">
                     {model.display_name}
                   </p>
-                  <div className="flex items-center gap-2 mt-0.5">
+                  <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                     <span
                       className={`text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded ${
                         model.arch === 'dfine'
@@ -107,11 +121,16 @@ export function ModelPanel() {
                     >
                       {model.arch}
                     </span>
-                    <span className="text-[10px] text-slate-500">
-                      {model.num_classes} classes
-                    </span>
-                    {model.loaded && (
-                      <span className="text-[10px] text-emerald-400">● GPU</span>
+                    {hasWeights ? (
+                      model.loaded ? (
+                        <span className="text-[10px] text-emerald-400">● GPU Loaded</span>
+                      ) : (
+                        <span className="text-[10px] text-slate-500">Ready</span>
+                      )
+                    ) : (
+                      <span className="text-[10px] text-red-400 bg-red-500/10 px-1 rounded border border-red-500/20" title={`Missing ${model.weights_file}`}>
+                        Missing .pth
+                      </span>
                     )}
                   </div>
                 </div>
@@ -142,18 +161,22 @@ export function ModelPanel() {
                   {!model.loaded && (
                     <button
                       onClick={() => handleLoad(model.model_id)}
-                      disabled={isLoading}
+                      disabled={isLoading || !hasWeights}
                       className="w-full flex items-center justify-center gap-2 text-xs font-medium
                                  bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300
                                  border border-indigo-500/30 rounded-md py-1.5
-                                 transition-colors disabled:opacity-50"
+                                 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {isLoading ? (
                         <Loader2 size={14} className="animate-spin" />
                       ) : (
                         <Cpu size={14} />
                       )}
-                      {isLoading ? 'Loading…' : 'Load to GPU'}
+                      {isLoading
+                        ? 'Loading…'
+                        : hasWeights
+                        ? 'Load to GPU'
+                        : `Missing ${model.weights_file}`}
                     </button>
                   )}
 

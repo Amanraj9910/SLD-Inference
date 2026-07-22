@@ -31,6 +31,8 @@ def load_model(model_id: str) -> ModelInfo:
         registry.get_or_load(model_id)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:
         logger.exception("Failed to load model '%s'", model_id)
         raise HTTPException(status_code=500, detail=str(exc))
