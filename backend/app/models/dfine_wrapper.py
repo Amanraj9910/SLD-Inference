@@ -157,7 +157,17 @@ class DFINEWrapper(BaseModelWrapper):
 
         cfg = YAMLConfig(cfg_path, resume=str(weights_path))
 
-        checkpoint = torch.load(str(weights_path), map_location="cpu", weights_only=False)
+        try:
+            checkpoint = torch.load(str(weights_path), map_location="cpu", weights_only=False)
+        except Exception as exc:
+            err_str = str(exc)
+            if "PytorchStreamReader" in err_str or "zip archive" in err_str or "miniz" in err_str:
+                raise ValueError(
+                    f"Checkpoint file '{weights_path.name}' is corrupted or incomplete on disk (truncated upload). "
+                    f"Please re-upload the weight file to server."
+                ) from exc
+            raise
+
         if "ema" in checkpoint:
             state = checkpoint["ema"]["module"]
         elif "model" in checkpoint:
