@@ -73,5 +73,13 @@ class ModelDetections(BaseModel):
     detections: list[Detection]
 
 
-# Response is a dict keyed by model_id
-InferResponse = dict[str, ModelDetections]
+class OCRLine(BaseModel):
+    """Single bounding-box text OCR detection."""
+    text: str
+    box: list[float]        # [x1, y1, x2, y2] in image pixels
+
+
+class InferResponse(BaseModel):
+    """Consolidated inference response containing model detections and OCR text."""
+    detections: dict[str, ModelDetections]
+    ocr: list[OCRLine] | None = None

@@ -5,6 +5,7 @@ import { ImageCanvas } from './components/ImageCanvas';
 import { ClassConfigModal } from './components/ClassConfigModal';
 import { UploadModelModal } from './components/UploadModelModal';
 import { LogsModal } from './components/LogsModal';
+import { JSONOutputModal } from './components/JSONOutputModal';
 import { Legend } from './components/Legend';
 import {
   Eye,
@@ -15,6 +16,7 @@ import {
   AlertCircle,
   Zap,
   Terminal,
+  Braces,
 } from 'lucide-react';
 
 export default function App() {
@@ -28,11 +30,14 @@ export default function App() {
     runInfer,
     showLabels,
     toggleShowLabels,
+    showOcr,
+    toggleShowOcr,
     detectionResults,
   } = useAppStore();
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [logsOpen, setLogsOpen] = useState(false);
+  const [jsonOutputOpen, setJsonOutputOpen] = useState(false);
 
   // Fetch models on mount
   useEffect(() => {
@@ -58,7 +63,9 @@ export default function App() {
     [handleFile]
   );
 
-  const hasResults = Object.keys(detectionResults).length > 0;
+  const hasResults =
+    Object.keys(detectionResults.detections || {}).length > 0 ||
+    ((detectionResults.ocr || []).length > 0);
   const canRunInfer = selectedModelIds.size > 0 && currentImageUrl !== null;
 
   return (
@@ -94,6 +101,20 @@ export default function App() {
           <span>{showLabels ? 'Labels On' : 'Labels Off'}</span>
         </button>
 
+        {/* OCR Toggle */}
+        <button
+          onClick={toggleShowOcr}
+          className={`flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg border transition-all ${
+            showOcr
+              ? 'border-emerald-600/40 bg-emerald-50 text-emerald-700'
+              : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+          }`}
+          title={showOcr ? 'OCR text labels visible' : 'OCR text labels hidden'}
+        >
+          {showOcr ? <Eye size={14} /> : <EyeOff size={14} />}
+          <span>{showOcr ? 'OCR On' : 'OCR Off'}</span>
+        </button>
+
         {/* Server logs button */}
         <button
           onClick={() => setLogsOpen(true)}
@@ -105,6 +126,19 @@ export default function App() {
         >
           <Terminal size={14} className="text-slate-500" />
           <span>Server Logs</span>
+        </button>
+
+        {/* JSON Output button */}
+        <button
+          onClick={() => setJsonOutputOpen(true)}
+          className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg
+                     border border-slate-200 bg-white
+                     text-slate-600 hover:text-slate-900 hover:bg-slate-50
+                     transition-all shadow-sm"
+          title="View coordinates and text-name JSON output"
+        >
+          <Braces size={14} className="text-indigo-600" />
+          <span>JSON Output</span>
         </button>
 
         {/* Upload button */}
@@ -209,6 +243,7 @@ export default function App() {
       <ClassConfigModal />
       <UploadModelModal />
       <LogsModal isOpen={logsOpen} onClose={() => setLogsOpen(false)} />
+      <JSONOutputModal isOpen={jsonOutputOpen} onClose={() => setJsonOutputOpen(false)} />
     </div>
   );
 }

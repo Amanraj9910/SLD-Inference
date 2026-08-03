@@ -36,6 +36,7 @@ export function ImageCanvas() {
     visibleModels,
     showLabels,
     models,
+    showOcr,
   } = useAppStore();
 
   // Reset zoom & position when a new image is loaded
@@ -113,7 +114,8 @@ export function ImageCanvas() {
     color: string;
   }> = [];
 
-  for (const [modelId, modelDets] of Object.entries(detectionResults)) {
+  const detectionsObj = detectionResults.detections || {};
+  for (const [modelId, modelDets] of Object.entries(detectionsObj)) {
     if (!visibleModels[modelId]) continue;
     const threshold = thresholds[modelId] ?? 0;
     const modelInfo = models.find(m => m.model_id === modelId);
@@ -133,6 +135,22 @@ export function ImageCanvas() {
           color: classColor(det.class_id),
         });
       });
+  }
+
+  const visibleOcr: Array<{
+    key: string;
+    text: string;
+    box: [number, number, number, number];
+  }> = [];
+
+  if (showOcr && detectionResults.ocr) {
+    detectionResults.ocr.forEach((line, idx) => {
+      visibleOcr.push({
+        key: `ocr-${idx}`,
+        text: line.text,
+        box: line.box,
+      });
+    });
   }
 
   const handleBoxEnter = useCallback(
@@ -243,6 +261,73 @@ export function ImageCanvas() {
             );
           })}
 
+          {/* OCR text boxes */}
+          {visibleOcr.map(({ key, text, box }) => {
+            const [x1, y1, x2, y2] = box;
+            const rx = x1 * scaleX;
+            const ry = y1 * scaleY;
+            const rw = (x2 - x1) * scaleX;
+            const rh = (y2 - y1) * scaleY;
+            const isHovered = hoveredKey === key;
+            const strokeWidth = (isHovered ? 2.5 : 1.25) / zoomScale;
+            const color = '#10b981';
+
+            return (
+              <Group key={key}>
+                <Rect
+                  x={rx}
+                  y={ry}
+                  width={rw}
+                  height={rh}
+                  stroke={color}
+                  strokeWidth={strokeWidth}
+                  dash={[4 / zoomScale, 2 / zoomScale]}
+                  fill={isHovered ? 'rgba(16,185,129,0.12)' : 'transparent'}
+                  onMouseEnter={e => {
+                    setHoveredKey(key);
+                    const stage = e.target.getStage();
+                    if (!stage) return;
+                    const pos = stage.getPointerPosition();
+                    if (!pos) return;
+                    setTooltip({
+                      x: (pos.x - stage.x()) / zoomScale + 12 / zoomScale,
+                      y: (pos.y - stage.y()) / zoomScale - 8 / zoomScale,
+                      label: text,
+                      color,
+                    });
+                  }}
+                  onMouseLeave={handleBoxLeave}
+                  onMouseMove={e => {
+                    const stage = e.target.getStage();
+                    if (!stage) return;
+                    const pos = stage.getPointerPosition();
+                    if (pos) {
+                      setTooltip(t => t ? {
+                        ...t,
+                        x: (pos.x - stage.x()) / zoomScale + 12 / zoomScale,
+                        y: (pos.y - stage.y()) / zoomScale - 8 / zoomScale
+                      } : t);
+                    }
+                  }}
+                />
+                {(showLabels || isHovered) && (
+                  <Text
+                    x={rx + 2 / zoomScale}
+                    y={ry + 2 / zoomScale}
+                    text={text}
+                    fontSize={10 / zoomScale}
+                    fontFamily="Inter, sans-serif"
+                    fill={color}
+                    shadowColor="black"
+                    shadowBlur={2 / zoomScale}
+                    shadowOpacity={0.8}
+                    listening={false}
+                  />
+                )}
+              </Group>
+            );
+          })}
+
           {/* Floating tooltip */}
           {tooltip && (
             <Group x={tooltip.x} y={tooltip.y} listening={false}>
@@ -300,9 +385,11 @@ export function ImageCanvas() {
       </div>
 
       {/* Detection count badge */}
-      {visibleDetections.length > 0 && (
+      {(visibleDetections.length > 0 || visibleOcr.length > 0) && (
         <div className="absolute top-3 right-3 glass rounded-full px-3 py-1 text-xs text-slate-300 pointer-events-none">
-          {visibleDetections.length} detection{visibleDetections.length !== 1 ? 's' : ''}
+          {visibleDetections.length > 0 && `${visibleDetections.length} component${visibleDetections.length !== 1 ? 's' : ''}`}
+          {visibleDetections.length > 0 && visibleOcr.length > 0 && ' | '}
+          {visibleOcr.length > 0 && `${visibleOcr.length} text line${visibleOcr.length !== 1 ? 's' : ''}`}
         </div>
       )}
     </div>

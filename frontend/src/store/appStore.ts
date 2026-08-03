@@ -30,7 +30,15 @@ export interface ModelDetections {
   detections: Detection[];
 }
 
-export type InferResponse = Record<string, ModelDetections>;
+export interface OCRLine {
+  text: string;
+  box: [number, number, number, number]; // [x1, y1, x2, y2]
+}
+
+export interface InferResponse {
+  detections: Record<string, ModelDetections>;
+  ocr: OCRLine[] | null;
+}
 
 // ─── Inference settings ────────────────────────────────────────────────────
 
@@ -67,6 +75,8 @@ interface AppState {
   // Global UI toggles
   showLabels: boolean;
   toggleShowLabels: () => void;
+  showOcr: boolean;
+  toggleShowOcr: () => void;
 
   // Inference settings
   inferSettings: InferSettings;
@@ -178,6 +188,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   // ── Global UI ────────────────────────────────────────────────────────────
   showLabels: false,
   toggleShowLabels: () => set(s => ({ showLabels: !s.showLabels })),
+  showOcr: true,
+  toggleShowOcr: () => set(s => ({ showOcr: !s.showOcr })),
 
   // ── Inference settings ───────────────────────────────────────────────────
   inferSettings: { useTiling: true, gridSize: 4, overlap: 0.2 },
@@ -193,13 +205,13 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({
       currentImageUrl: URL.createObjectURL(file),
       currentImageFile: file,
-      detectionResults: {},
+      detectionResults: { detections: {}, ocr: null },
       inferError: null,
     });
   },
 
   // ── Inference ────────────────────────────────────────────────────────────
-  detectionResults: {},
+  detectionResults: { detections: {}, ocr: null },
   isInferring: false,
   inferError: null,
 

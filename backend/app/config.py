@@ -26,6 +26,10 @@ class Settings(BaseSettings):
     # CORS origins — "*" is fine for single-box Option A deploy
     cors_origins: list[str] = ["*"]
 
+    # Azure Document Intelligence credentials
+    azure_document_intelligence_endpoint: str | None = None
+    azure_document_intelligence_key: str | None = None
+
     @property
     def resolved_weights_dir(self) -> Path:
         p = Path(self.weights_dir)
