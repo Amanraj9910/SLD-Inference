@@ -14,6 +14,11 @@ export interface ModelInfo {
   confidence_default: number;
   grid_size: number;
   overlap: number;
+  tiling_mode?: 'fixed' | 'adaptive';
+  target_symbol_px?: number;
+  estimated_symbol_px?: number;
+  enable_auto_crop?: boolean;
+  enable_scale_norm?: boolean;
   iou_threshold: number;
   loaded: boolean;
   weights_exist: boolean;
@@ -44,8 +49,13 @@ export interface InferResponse {
 
 export interface InferSettings {
   useTiling: boolean;
+  tilingMode: 'fixed' | 'adaptive';
   gridSize: number;
   overlap: number;
+  targetSymbolPx: number;
+  estimatedSymbolPx: number;
+  enableAutoCrop: boolean;
+  enableScaleNorm: boolean;
 }
 
 // ─── Store ─────────────────────────────────────────────────────────────────
@@ -58,7 +68,15 @@ interface AppState {
   loadModel: (modelId: string) => Promise<void>;
   updateModelConfig: (
     modelId: string,
-    patch: { class_names?: string[]; confidence_default?: number }
+    patch: {
+      class_names?: string[];
+      confidence_default?: number;
+      tiling_mode?: 'fixed' | 'adaptive';
+      target_symbol_px?: number;
+      estimated_symbol_px?: number;
+      enable_auto_crop?: boolean;
+      enable_scale_norm?: boolean;
+    }
   ) => Promise<void>;
   deleteModel: (modelId: string) => Promise<void>;
 
@@ -85,6 +103,7 @@ interface AppState {
   // Image + detections
   currentImageUrl: string | null;              // object URL for canvas
   currentImageFile: File | null;
+  imageDimensions: { width: number; height: number } | null;
   setImage: (file: File) => void;
 
   detectionResults: InferResponse;
@@ -99,7 +118,8 @@ interface AppState {
 
   // Upload model modal
   uploadModalOpen: boolean;
-  openUploadModal: () => void;
+  uploadModalMode: 'adaptive' | 'fixed';
+  openUploadModal: (mode?: 'adaptive' | 'fixed') => void;
   closeUploadModal: () => void;
   uploadModel: (params: Parameters<typeof api.uploadModel>[0]) => Promise<void>;
 }
@@ -192,19 +212,38 @@ export const useAppStore = create<AppState>((set, get) => ({
   toggleShowOcr: () => set(s => ({ showOcr: !s.showOcr })),
 
   // ── Inference settings ───────────────────────────────────────────────────
-  inferSettings: { useTiling: true, gridSize: 4, overlap: 0.2 },
+  inferSettings: {
+    useTiling: true,
+    tilingMode: 'adaptive',
+    gridSize: 4,
+    overlap: 0.2,
+    targetSymbolPx: 48,
+    estimatedSymbolPx: 48,
+    enableAutoCrop: false,
+    enableScaleNorm: false,
+  },
   setInferSettings: patch =>
     set(s => ({ inferSettings: { ...s.inferSettings, ...patch } })),
 
   // ── Image ────────────────────────────────────────────────────────────────
   currentImageUrl: null,
   currentImageFile: null,
+  imageDimensions: null,
   setImage: (file: File) => {
     const prev = get().currentImageUrl;
     if (prev) URL.revokeObjectURL(prev);
+    const url = URL.createObjectURL(file);
+
+    const img = new Image();
+    img.onload = () => {
+      set({ imageDimensions: { width: img.naturalWidth, height: img.naturalHeight } });
+    };
+    img.src = url;
+
     set({
-      currentImageUrl: URL.createObjectURL(file),
+      currentImageUrl: url,
       currentImageFile: file,
+      imageDimensions: null,
       detectionResults: { detections: {}, ocr: null },
       inferError: null,
     });
@@ -225,8 +264,13 @@ export const useAppStore = create<AppState>((set, get) => ({
         image: currentImageFile,
         modelIds: [...selectedModelIds],
         useTiling: inferSettings.useTiling,
+        tilingMode: inferSettings.tilingMode,
         gridSize: inferSettings.gridSize,
         overlap: inferSettings.overlap,
+        targetSymbolPx: inferSettings.targetSymbolPx,
+        estimatedSymbolPx: inferSettings.estimatedSymbolPx,
+        enableAutoCrop: inferSettings.enableAutoCrop,
+        enableScaleNorm: inferSettings.enableScaleNorm,
       });
       set({ detectionResults: results });
     } catch (err: unknown) {
@@ -244,7 +288,8 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   // ── Upload model modal ───────────────────────────────────────────────────
   uploadModalOpen: false,
-  openUploadModal: () => set({ uploadModalOpen: true }),
+  uploadModalMode: 'adaptive',
+  openUploadModal: (mode = 'adaptive') => set({ uploadModalOpen: true, uploadModalMode: mode }),
   closeUploadModal: () => set({ uploadModalOpen: false }),
 
   uploadModel: async params => {

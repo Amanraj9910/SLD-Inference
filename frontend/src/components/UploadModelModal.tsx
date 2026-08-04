@@ -1,9 +1,9 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useAppStore } from '../store/appStore';
 import { X, Upload, FileCode, AlertCircle, Loader2 } from 'lucide-react';
 
 export function UploadModelModal() {
-  const { uploadModalOpen, closeUploadModal, uploadModel } = useAppStore();
+  const { uploadModalOpen, uploadModalMode, closeUploadModal, uploadModel } = useAppStore();
 
   const [arch, setArch] = useState<'dfine' | 'rfdetr'>('dfine');
   const [displayName, setDisplayName] = useState('');
@@ -13,6 +13,17 @@ export function UploadModelModal() {
   const [confidenceDefault, setConfidenceDefault] = useState(0.20);
   const [gridSize, setGridSize] = useState(4);
   const [overlap, setOverlap] = useState(0.20);
+  const [tilingMode, setTilingMode] = useState<'fixed' | 'adaptive'>(uploadModalMode || 'adaptive');
+  const [targetSymbolPx, setTargetSymbolPx] = useState(48);
+  const [estimatedSymbolPx, setEstimatedSymbolPx] = useState(48);
+  const [enableAutoCrop, setEnableAutoCrop] = useState(false);
+  const [enableScaleNorm, setEnableScaleNorm] = useState(false);
+
+  useEffect(() => {
+    if (uploadModalOpen) {
+      setTilingMode(uploadModalMode || 'adaptive');
+    }
+  }, [uploadModalOpen, uploadModalMode]);
 
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -62,6 +73,11 @@ export function UploadModelModal() {
         confidenceDefault,
         gridSize,
         overlap,
+        tilingMode,
+        targetSymbolPx,
+        estimatedSymbolPx,
+        enableAutoCrop,
+        enableScaleNorm,
       });
       closeUploadModal();
     } catch (err: unknown) {
@@ -214,7 +230,29 @@ export function UploadModelModal() {
               />
             </div>
             <div className="space-y-1">
-              <label className="text-[11px] font-semibold text-slate-600">Tiling Grid Size</label>
+              <label className="text-[11px] font-semibold text-slate-600">Default Tiling Mode</label>
+              <select
+                value={tilingMode}
+                onChange={e => setTilingMode(e.target.value as 'fixed' | 'adaptive')}
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs text-slate-800 outline-none"
+              >
+                <option value="adaptive">Adaptive (Size-Based)</option>
+                <option value="fixed">Fixed Grid</option>
+              </select>
+            </div>
+            <div className="space-y-1">
+              <label className="text-[11px] font-semibold text-slate-600">Target Symbol Size (px)</label>
+              <input
+                type="number"
+                min={16}
+                max={256}
+                value={targetSymbolPx}
+                onChange={e => setTargetSymbolPx(parseFloat(e.target.value) || 48)}
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs text-slate-800 outline-none"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[11px] font-semibold text-slate-600">Grid Size (Fixed)</label>
               <input
                 type="number"
                 min={1}
@@ -236,6 +274,41 @@ export function UploadModelModal() {
                 className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs text-slate-800 outline-none"
               />
             </div>
+            <div className="space-y-1">
+              <label className="text-[11px] font-semibold text-slate-600">Est. Symbol Size (px)</label>
+              <input
+                type="number"
+                min={16}
+                max={256}
+                value={estimatedSymbolPx}
+                onChange={e => setEstimatedSymbolPx(parseFloat(e.target.value) || 48)}
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs text-slate-800 outline-none"
+              />
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between pt-1">
+            <span className="text-xs text-slate-600 font-semibold">Auto-Crop Margins</span>
+            <label className="toggle">
+              <input
+                type="checkbox"
+                checked={enableAutoCrop}
+                onChange={e => setEnableAutoCrop(e.target.checked)}
+              />
+              <span className="toggle-slider" />
+            </label>
+          </div>
+
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-slate-600 font-semibold">Scale Normalization</span>
+            <label className="toggle">
+              <input
+                type="checkbox"
+                checked={enableScaleNorm}
+                onChange={e => setEnableScaleNorm(e.target.checked)}
+              />
+              <span className="toggle-slider" />
+            </label>
           </div>
 
           {/* Error Message */}

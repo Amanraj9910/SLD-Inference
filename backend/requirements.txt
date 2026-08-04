@@ -14,3 +14,7 @@ pyyaml
 scipy
 faster-coco-eval
 pycocotools
+tensorboard
+calflops
+transformers
+loguru

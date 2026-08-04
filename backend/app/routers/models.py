@@ -54,7 +54,7 @@ def load_model(model_id: str) -> ModelInfo:
 @router.put("/api/models/{model_id}/config", response_model=ModelInfo)
 def update_config(model_id: str, body: UpdateConfigRequest) -> ModelInfo:
     """
-    Live-edit class names and/or confidence threshold for a model.
+    Live-edit class names, confidence threshold, and adaptive tiling settings for a model.
     Rewrites manifest.json on disk — no server restart needed.
     num_classes is read-only (baked into checkpoint output-layer shape).
     """
@@ -63,6 +63,11 @@ def update_config(model_id: str, body: UpdateConfigRequest) -> ModelInfo:
             model_id,
             class_names=body.class_names,
             confidence_default=body.confidence_default,
+            tiling_mode=body.tiling_mode,
+            target_symbol_px=body.target_symbol_px,
+            estimated_symbol_px=body.estimated_symbol_px,
+            enable_auto_crop=body.enable_auto_crop,
+            enable_scale_norm=body.enable_scale_norm,
         )
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
@@ -119,6 +124,11 @@ async def upload_model(
         "confidence_default": data.confidence_default,
         "grid_size": data.grid_size,
         "overlap": data.overlap,
+        "tiling_mode": data.tiling_mode,
+        "target_symbol_px": data.target_symbol_px,
+        "estimated_symbol_px": data.estimated_symbol_px,
+        "enable_auto_crop": data.enable_auto_crop,
+        "enable_scale_norm": data.enable_scale_norm,
         "iou_threshold": data.iou_threshold,
         "class_names": data.class_names,
     }

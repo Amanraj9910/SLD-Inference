@@ -113,7 +113,7 @@ class DFINEWrapper(BaseModelWrapper):
 
     def load(self) -> None:
         # ── 1. Make D-FINE importable ────────────────────────────────────
-        dfine_path = settings.dfine_repo_path
+        dfine_path = str(settings.resolved_dfine_repo_path)
         if dfine_path not in sys.path:
             sys.path.insert(0, dfine_path)
         try:

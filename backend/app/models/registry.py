@@ -94,6 +94,11 @@ def scan() -> list[ModelInfo]:
                 confidence_default=manifest.get("confidence_default", 0.20),
                 grid_size=manifest.get("grid_size", 4),
                 overlap=manifest.get("overlap", 0.20),
+                tiling_mode=manifest.get("tiling_mode", "fixed"),
+                target_symbol_px=float(manifest.get("target_symbol_px", 48.0)),
+                estimated_symbol_px=float(manifest.get("estimated_symbol_px", 48.0)),
+                enable_auto_crop=bool(manifest.get("enable_auto_crop", False)),
+                enable_scale_norm=bool(manifest.get("enable_scale_norm", False)),
                 iou_threshold=manifest.get("iou_threshold", 0.50),
                 loaded=model_id in _registry,
                 weights_exist=weights_exist,
@@ -144,13 +149,17 @@ def get_or_load(model_id: str) -> BaseModelWrapper:
 
 def update_manifest(
     model_id: str,
-    class_names: list[str] | None,
-    confidence_default: float | None,
+    class_names: list[str] | None = None,
+    confidence_default: float | None = None,
+    tiling_mode: str | None = None,
+    target_symbol_px: float | None = None,
+    estimated_symbol_px: float | None = None,
+    enable_auto_crop: bool | None = None,
+    enable_scale_norm: bool | None = None,
 ) -> ModelInfo:
     """
-    Update class_names and/or confidence_default for a model — both in the
-    in-memory manifest and on disk.  No model reload is required because these
-    fields don't touch the network weights.
+    Update class_names, confidence_default, and adaptive tiling fields for a model
+    — both in the in-memory manifest and on disk.
     """
     if not _manifests:
         scan()
@@ -163,6 +172,16 @@ def update_manifest(
         manifest["class_names"] = class_names
     if confidence_default is not None:
         manifest["confidence_default"] = confidence_default
+    if tiling_mode is not None:
+        manifest["tiling_mode"] = tiling_mode
+    if target_symbol_px is not None:
+        manifest["target_symbol_px"] = target_symbol_px
+    if estimated_symbol_px is not None:
+        manifest["estimated_symbol_px"] = estimated_symbol_px
+    if enable_auto_crop is not None:
+        manifest["enable_auto_crop"] = enable_auto_crop
+    if enable_scale_norm is not None:
+        manifest["enable_scale_norm"] = enable_scale_norm
 
     # Persist to disk
     weights_subdir = Path(manifest["_weights_subdir"])
@@ -192,6 +211,11 @@ def update_manifest(
         confidence_default=manifest["confidence_default"],
         grid_size=manifest.get("grid_size", 4),
         overlap=manifest.get("overlap", 0.20),
+        tiling_mode=manifest.get("tiling_mode", "fixed"),
+        target_symbol_px=float(manifest.get("target_symbol_px", 48.0)),
+        estimated_symbol_px=float(manifest.get("estimated_symbol_px", 48.0)),
+        enable_auto_crop=bool(manifest.get("enable_auto_crop", False)),
+        enable_scale_norm=bool(manifest.get("enable_scale_norm", False)),
         iou_threshold=manifest.get("iou_threshold", 0.50),
         loaded=model_id in _registry,
         weights_exist=weights_exist,

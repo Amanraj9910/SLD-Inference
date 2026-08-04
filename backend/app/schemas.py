@@ -23,6 +23,11 @@ class ModelInfo(BaseModel):
     confidence_default: float
     grid_size: int = 4
     overlap: float = 0.20
+    tiling_mode: str = "fixed"          # "fixed" | "adaptive"
+    target_symbol_px: float = 48.0
+    estimated_symbol_px: float = 48.0
+    enable_auto_crop: bool = False
+    enable_scale_norm: bool = False
     iou_threshold: float = 0.50
     loaded: bool = False                # True once the GPU model is in memory
     weights_exist: bool = True          # True if the .pth file actually exists on disk
@@ -32,6 +37,11 @@ class UpdateConfigRequest(BaseModel):
     """Body for PUT /api/models/{model_id}/config."""
     class_names: list[str] | None = None
     confidence_default: float | None = None
+    tiling_mode: str | None = None
+    target_symbol_px: float | None = None
+    estimated_symbol_px: float | None = None
+    enable_auto_crop: bool | None = None
+    enable_scale_norm: bool | None = None
 
 
 class UploadModelManifest(BaseModel):
@@ -44,6 +54,11 @@ class UploadModelManifest(BaseModel):
     confidence_default: float = 0.20
     grid_size: int = 4
     overlap: float = 0.20
+    tiling_mode: str = "fixed"         # "fixed" | "adaptive"
+    target_symbol_px: float = 48.0
+    estimated_symbol_px: float = 48.0
+    enable_auto_crop: bool = False
+    enable_scale_norm: bool = False
     iou_threshold: float = 0.50
     model_id: str | None = None
 
@@ -56,8 +71,14 @@ class InferRequest(BaseModel):
     """JSON body attached to the multipart /api/infer request."""
     model_ids: list[str] = Field(..., min_length=1)
     use_tiling: bool = True
+    tiling_mode: str = "fixed"          # "fixed" | "adaptive"
     grid_size: int = Field(4, ge=1, le=10)
     overlap: float = Field(0.20, ge=0.0, lt=1.0)
+    target_symbol_px: float = 48.0
+    estimated_symbol_px: float = 48.0
+    enable_auto_crop: bool = False
+    enable_scale_norm: bool = False
+
 
 
 class Detection(BaseModel):

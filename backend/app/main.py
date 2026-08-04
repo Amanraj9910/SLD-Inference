@@ -11,9 +11,18 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.routers import infer, models
 
+from pathlib import Path
+
+backend_dir = Path(__file__).resolve().parent.parent
+log_path = backend_dir / "backend.log"
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s | %(levelname)-8s | %(name)s — %(message)s",
+    handlers=[
+        logging.StreamHandler(),
+        logging.FileHandler(log_path, mode="a", encoding="utf-8"),
+    ],
 )
 
 app = FastAPI(
