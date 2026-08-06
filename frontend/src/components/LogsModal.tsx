@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { api } from '../api/client';
 import { X, RefreshCw, Terminal } from 'lucide-react';
 
@@ -10,6 +10,7 @@ interface LogsModalProps {
 export function LogsModal({ isOpen, onClose }: LogsModalProps) {
   const [logs, setLogs] = useState<string>('Loading backend logs…');
   const [loading, setLoading] = useState(false);
+  const logViewportRef = useRef<HTMLDivElement>(null);
 
   const fetchLogs = async () => {
     setLoading(true);
@@ -25,10 +26,17 @@ export function LogsModal({ isOpen, onClose }: LogsModalProps) {
   };
 
   useEffect(() => {
-    if (isOpen) {
-      fetchLogs();
-    }
+    if (!isOpen) return;
+    void fetchLogs();
+    const interval = window.setInterval(() => void fetchLogs(), 5000);
+    return () => window.clearInterval(interval);
   }, [isOpen]);
+
+  useEffect(() => {
+    if (logViewportRef.current) {
+      logViewportRef.current.scrollTop = logViewportRef.current.scrollHeight;
+    }
+  }, [logs]);
 
   if (!isOpen) return null;
 
@@ -74,7 +82,7 @@ export function LogsModal({ isOpen, onClose }: LogsModalProps) {
         </div>
 
         {/* Log Viewer Content (Dark terminal viewport inside white modal) */}
-        <div className="flex-1 p-6 overflow-y-auto font-mono text-xs text-slate-200 bg-slate-900 leading-relaxed whitespace-pre-wrap selection:bg-indigo-500/30 selection:text-white">
+        <div ref={logViewportRef} className="flex-1 p-6 overflow-y-auto font-mono text-xs text-slate-200 bg-slate-900 leading-relaxed whitespace-pre-wrap selection:bg-indigo-500/30 selection:text-white">
           {logs}
         </div>
       </div>

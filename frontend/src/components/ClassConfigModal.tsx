@@ -10,11 +10,6 @@ export function ClassConfigModal() {
 
   const [classText, setClassText] = useState('');
   const [threshold, setThreshold] = useState(0.2);
-  const [tilingMode, setTilingMode] = useState<'fixed' | 'adaptive'>('adaptive');
-  const [targetSymbolPx, setTargetSymbolPx] = useState(48);
-  const [estimatedSymbolPx, setEstimatedSymbolPx] = useState(48);
-  const [enableAutoCrop, setEnableAutoCrop] = useState(false);
-  const [enableScaleNorm, setEnableScaleNorm] = useState(false);
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -24,11 +19,6 @@ export function ClassConfigModal() {
     if (model) {
       setClassText(model.class_names.join('\n'));
       setThreshold(model.confidence_default);
-      setTilingMode(model.tiling_mode ?? 'adaptive');
-      setTargetSymbolPx(model.target_symbol_px ?? 48);
-      setEstimatedSymbolPx(model.estimated_symbol_px ?? 48);
-      setEnableAutoCrop(model.enable_auto_crop ?? false);
-      setEnableScaleNorm(model.enable_scale_norm ?? false);
       setError(null);
     }
   }, [model]);
@@ -56,11 +46,6 @@ export function ClassConfigModal() {
       await updateModelConfig(model.model_id, {
         class_names: names,
         confidence_default: threshold,
-        tiling_mode: tilingMode,
-        target_symbol_px: targetSymbolPx,
-        estimated_symbol_px: estimatedSymbolPx,
-        enable_auto_crop: enableAutoCrop,
-        enable_scale_norm: enableScaleNorm,
       });
       closeConfigModal();
     } catch (err) {
@@ -124,57 +109,6 @@ export function ClassConfigModal() {
             <span className="text-xs font-semibold text-slate-900 tabular-nums w-12 text-right">
               {(threshold * 100).toFixed(0)}%
             </span>
-          </div>
-        </div>
-
-        {/* Adaptive Tiling Settings */}
-        <div className="space-y-2 border-t border-slate-100 pt-3">
-          <label className="text-xs font-semibold text-slate-700">
-            Adaptive Tiling Defaults
-          </label>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <label className="text-[11px] text-slate-500">Tiling Mode</label>
-              <select
-                value={tilingMode}
-                onChange={e => setTilingMode(e.target.value as 'fixed' | 'adaptive')}
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs text-slate-800 outline-none"
-              >
-                <option value="adaptive">Adaptive (Size-Based)</option>
-                <option value="fixed">Fixed Grid</option>
-              </select>
-            </div>
-            <div className="space-y-1">
-              <label className="text-[11px] text-slate-500">Target Symbol Size (px)</label>
-              <input
-                type="number"
-                value={targetSymbolPx}
-                onChange={e => setTargetSymbolPx(parseFloat(e.target.value) || 48)}
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs text-slate-800 outline-none"
-              />
-            </div>
-          </div>
-          <div className="flex items-center justify-between pt-1">
-            <span className="text-xs text-slate-600">Auto-Crop Margins</span>
-            <label className="toggle">
-              <input
-                type="checkbox"
-                checked={enableAutoCrop}
-                onChange={e => setEnableAutoCrop(e.target.checked)}
-              />
-              <span className="toggle-slider" />
-            </label>
-          </div>
-          <div className="flex items-center justify-between">
-            <span className="text-xs text-slate-600">Scale Normalization</span>
-            <label className="toggle">
-              <input
-                type="checkbox"
-                checked={enableScaleNorm}
-                onChange={e => setEnableScaleNorm(e.target.checked)}
-              />
-              <span className="toggle-slider" />
-            </label>
           </div>
         </div>
 

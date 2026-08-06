@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import json
 import logging
+import threading
 from pathlib import Path
 from typing import Iterator
 
@@ -17,6 +18,12 @@ logger = logging.getLogger(__name__)
 
 # In-memory store: model_id → loaded wrapper instance
 _registry: dict[str, BaseModelWrapper] = {}
+
+# Checkpoint identity for each loaded wrapper.  This lets a running server
+# notice when a .pth file is replaced on disk instead of silently reusing the
+# old model object.
+_loaded_signatures: dict[str, tuple] = {}
+_registry_lock = threading.Lock()
 
 # In-memory manifest cache (keeps display metadata even for unloaded models)
 _manifests: dict[str, dict] = {}
@@ -40,6 +47,26 @@ def _manifest_iter(weights_dir: Path) -> Iterator[tuple[str, Path, dict]]:
             logger.warning("Skipping %s — unknown arch '%s'", manifest_path, arch)
             continue
 
+        class_names = manifest.get("class_names", [])
+        if isinstance(class_names, list):
+            cleaned_names = [
+                name.strip().strip(",").strip('"') if isinstance(name, str) else name
+                for name in class_names
+            ]
+            if cleaned_names != class_names:
+                logger.warning(
+                    "Normalizing serialized class names in %s; regenerate the manifest from the processed COCO categories.",
+                    manifest_path,
+                )
+                manifest["class_names"] = cleaned_names
+            if len(cleaned_names) != manifest.get("num_classes"):
+                logger.warning(
+                    "Model '%s' declares %s classes but has %s class names.",
+                    manifest.get("model_id", manifest_path.parent.name),
+                    manifest.get("num_classes"),
+                    len(cleaned_names),
+                )
+
         # model_id is derived from the subfolder name, e.g. weights/dfine/ → "dfine"
         folder_name = manifest_path.parent.name
         model_id = manifest.get("model_id", folder_name)
@@ -61,6 +88,24 @@ def _build_wrapper(model_id: str, manifest: dict) -> BaseModelWrapper:
         raise ValueError(f"Unknown arch '{arch}' for model '{model_id}'")
 
 
+def _weights_signature(manifest: dict) -> tuple:
+    """Return the parts of a manifest that determine the loaded checkpoint."""
+    weights_subdir = Path(manifest["_weights_subdir"])
+    weights_file = manifest.get("weights_file", "")
+    weights_path = weights_subdir / weights_file
+    try:
+        stat = weights_path.stat()
+        file_signature = (str(weights_path.resolve()), stat.st_size, stat.st_mtime_ns)
+    except FileNotFoundError:
+        file_signature = (str(weights_path.resolve()), None, None)
+    return (
+        manifest.get("arch", "").lower(),
+        manifest.get("num_classes"),
+        manifest.get("resolution", 640),
+        file_signature,
+    )
+
+
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
@@ -76,8 +121,20 @@ def scan() -> list[ModelInfo]:
         return []
 
     results: list[ModelInfo] = []
+    discovered_ids: set[str] = set()
     for model_id, weights_subdir, manifest in _manifest_iter(weights_dir):
+        discovered_ids.add(model_id)
+        signature = _weights_signature(manifest)
+        if model_id in _registry and _loaded_signatures.get(model_id) != signature:
+            logger.info(
+                "Checkpoint for model '%s' changed on disk; invalidating cached model.",
+                model_id,
+            )
+            del _registry[model_id]
+            _loaded_signatures.pop(model_id, None)
         _manifests[model_id] = manifest
+        if model_id in _registry:
+            _registry[model_id].manifest = manifest
         weights_file = manifest.get("weights_file", "")
         weights_path = weights_subdir / weights_file if weights_file else None
         weights_exist = bool(weights_path and weights_path.is_file() and weights_path.stat().st_size > 1024 * 10)
@@ -104,6 +161,12 @@ def scan() -> list[ModelInfo]:
                 weights_exist=weights_exist,
             )
         )
+
+    for model_id in set(_manifests) - discovered_ids:
+        _manifests.pop(model_id, None)
+        _registry.pop(model_id, None)
+        _loaded_signatures.pop(model_id, None)
+
     return results
 
 
@@ -116,17 +179,23 @@ def get_model_info(model_id: str) -> ModelInfo | None:
 
 
 def get_or_load(model_id: str) -> BaseModelWrapper:
+    """Return a loaded model, serializing concurrent first-load requests."""
+    with _registry_lock:
+        return _get_or_load(model_id)
+
+
+def _get_or_load(model_id: str) -> BaseModelWrapper:
     """
     Return the loaded wrapper for *model_id*, loading it on first call.
     Raises KeyError if the model_id is not in any discovered manifest.
     Raises FileNotFoundError if the .pth weight file is missing on disk.
     """
+    # Rescan on every load request so a manually replaced checkpoint is
+    # detected even when this process has already loaded the model once.
+    scan()
+
     if model_id in _registry:
         return _registry[model_id]
-
-    # Ensure manifests are populated
-    if not _manifests:
-        scan()
 
     if model_id not in _manifests:
         raise KeyError(f"Model '{model_id}' not found in weights/")
@@ -143,6 +212,7 @@ def get_or_load(model_id: str) -> BaseModelWrapper:
     wrapper = _build_wrapper(model_id, manifest)
     wrapper.load()
     _registry[model_id] = wrapper
+    _loaded_signatures[model_id] = _weights_signature(manifest)
     logger.info("Model '%s' loaded and cached.", model_id)
     return wrapper
 
@@ -240,4 +310,3 @@ def delete_model(model_id: str) -> None:
         logger.info("Model '%s' directory removed from disk.", model_id)
 
     scan()
-

@@ -71,13 +71,13 @@ class InferRequest(BaseModel):
     """JSON body attached to the multipart /api/infer request."""
     model_ids: list[str] = Field(..., min_length=1)
     use_tiling: bool = True
-    tiling_mode: str = "fixed"          # "fixed" | "adaptive"
-    grid_size: int = Field(4, ge=1, le=10)
-    overlap: float = Field(0.20, ge=0.0, lt=1.0)
-    target_symbol_px: float = 48.0
-    estimated_symbol_px: float = 48.0
-    enable_auto_crop: bool = False
-    enable_scale_norm: bool = False
+    tiling_mode: str | None = None       # None uses each model manifest
+    grid_size: int | None = Field(None, ge=1, le=10)
+    overlap: float | None = Field(None, ge=0.0, lt=1.0)
+    target_symbol_px: float | None = Field(None, gt=0.0)
+    estimated_symbol_px: float | None = Field(None, gt=0.0)
+    enable_auto_crop: bool | None = None
+    enable_scale_norm: bool | None = None
 
 
 

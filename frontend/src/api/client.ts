@@ -62,10 +62,10 @@ export const api = {
         tiling_mode: params.tilingMode,
         grid_size: params.gridSize,
         overlap: params.overlap,
-        target_symbol_px: params.targetSymbolPx ?? 48.0,
-        estimated_symbol_px: params.estimatedSymbolPx ?? 48.0,
-        enable_auto_crop: params.enableAutoCrop ?? false,
-        enable_scale_norm: params.enableScaleNorm ?? false,
+        ...(params.targetSymbolPx !== undefined && { target_symbol_px: params.targetSymbolPx }),
+        ...(params.estimatedSymbolPx !== undefined && { estimated_symbol_px: params.estimatedSymbolPx }),
+        ...(params.enableAutoCrop !== undefined && { enable_auto_crop: params.enableAutoCrop }),
+        ...(params.enableScaleNorm !== undefined && { enable_scale_norm: params.enableScaleNorm }),
       })
     );
     return http

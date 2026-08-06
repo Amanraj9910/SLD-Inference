@@ -45,10 +45,39 @@ export interface InferResponse {
   ocr: OCRLine[] | null;
 }
 
+export interface ModelGroup {
+  id: string;
+  name: string;
+  modelIds: string[];
+}
+
+const MODEL_GROUPS_STORAGE_KEY = 'sld-inference-model-groups';
+
+function loadModelGroups(): ModelGroup[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const parsed = JSON.parse(localStorage.getItem(MODEL_GROUPS_STORAGE_KEY) || '[]');
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(
+      (group): group is ModelGroup =>
+        typeof group?.id === 'string' &&
+        typeof group?.name === 'string' &&
+        Array.isArray(group?.modelIds),
+    );
+  } catch {
+    return [];
+  }
+}
+
+function saveModelGroups(groups: ModelGroup[]): void {
+  if (typeof window !== 'undefined') {
+    localStorage.setItem(MODEL_GROUPS_STORAGE_KEY, JSON.stringify(groups));
+  }
+}
+
 // ─── Inference settings ────────────────────────────────────────────────────
 
 export interface InferSettings {
-  useTiling: boolean;
   tilingMode: 'fixed' | 'adaptive';
   gridSize: number;
   overlap: number;
@@ -83,6 +112,10 @@ interface AppState {
   // Selection
   selectedModelIds: Set<string>;
   toggleModelSelected: (modelId: string) => void;
+  groups: ModelGroup[];
+  createGroup: (name: string) => void;
+  deleteGroup: (groupId: string) => void;
+  moveModelToGroup: (modelId: string, groupId: string | null) => void;
 
   // Per-model UI state
   thresholds: Record<string, number>;          // client-side threshold per model
@@ -138,14 +171,26 @@ export const useAppStore = create<AppState>((set, get) => ({
         const thresholds = { ...state.thresholds };
         const visibleModels = { ...state.visibleModels };
         for (const m of models) {
-          if (!(m.model_id in thresholds)) {
+          const previousModel = state.models.find(previous => previous.model_id === m.model_id);
+          const thresholdWasDefault =
+            previousModel !== undefined &&
+            thresholds[m.model_id] === previousModel.confidence_default;
+          if (!(m.model_id in thresholds) || thresholdWasDefault) {
             thresholds[m.model_id] = m.confidence_default;
           }
           if (!(m.model_id in visibleModels)) {
             visibleModels[m.model_id] = true;
           }
         }
-        return { models, thresholds, visibleModels };
+        const validModelIds = new Set(models.map(model => model.model_id));
+        const groups = state.groups
+          .map(group => ({
+            ...group,
+            modelIds: group.modelIds.filter(modelId => validModelIds.has(modelId)),
+          }))
+          .filter(group => group.modelIds.length > 0 || group.name.trim().length > 0);
+        saveModelGroups(groups);
+        return { models, thresholds, visibleModels, groups };
       });
     } finally {
       set({ modelsLoading: false });
@@ -183,6 +228,44 @@ export const useAppStore = create<AppState>((set, get) => ({
   // ── Selection ────────────────────────────────────────────────────────────
   selectedModelIds: new Set(),
 
+  groups: loadModelGroups(),
+  createGroup: name => {
+    const cleanName = name.trim();
+    if (!cleanName) return;
+    set(state => {
+      if (state.groups.some(group => group.name.toLowerCase() === cleanName.toLowerCase())) {
+        return state;
+      }
+      const groups = [
+        ...state.groups,
+        { id: `group-${Date.now()}`, name: cleanName, modelIds: [] },
+      ];
+      saveModelGroups(groups);
+      return { groups };
+    });
+  },
+  deleteGroup: groupId => {
+    set(state => {
+      const groups = state.groups.filter(group => group.id !== groupId);
+      saveModelGroups(groups);
+      return { groups };
+    });
+  },
+  moveModelToGroup: (modelId, groupId) => {
+    set(state => {
+      const groups = state.groups.map(group => ({
+        ...group,
+        modelIds: group.modelIds.filter(id => id !== modelId),
+      }));
+      if (groupId) {
+        const target = groups.find(group => group.id === groupId);
+        if (target) target.modelIds.push(modelId);
+      }
+      saveModelGroups(groups);
+      return { groups };
+    });
+  },
+
   toggleModelSelected: (modelId: string) =>
     set(state => {
       const next = new Set(state.selectedModelIds);
@@ -213,14 +296,13 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   // ── Inference settings ───────────────────────────────────────────────────
   inferSettings: {
-    useTiling: true,
     tilingMode: 'adaptive',
     gridSize: 4,
     overlap: 0.2,
     targetSymbolPx: 48,
-    estimatedSymbolPx: 48,
-    enableAutoCrop: false,
-    enableScaleNorm: false,
+    estimatedSymbolPx: 210,
+    enableAutoCrop: true,
+    enableScaleNorm: true,
   },
   setInferSettings: patch =>
     set(s => ({ inferSettings: { ...s.inferSettings, ...patch } })),
@@ -263,7 +345,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       const results = await api.infer({
         image: currentImageFile,
         modelIds: [...selectedModelIds],
-        useTiling: inferSettings.useTiling,
+        useTiling: true,
         tilingMode: inferSettings.tilingMode,
         gridSize: inferSettings.gridSize,
         overlap: inferSettings.overlap,

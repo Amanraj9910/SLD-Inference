@@ -4,26 +4,60 @@ FastAPI application entry point.
 from __future__ import annotations
 
 import logging
+from logging.handlers import RotatingFileHandler
+from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Query, Response
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
 from app.routers import infer, models
 
-from pathlib import Path
-
 backend_dir = Path(__file__).resolve().parent.parent
 log_path = backend_dir / "backend.log"
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s | %(levelname)-8s | %(name)s — %(message)s",
-    handlers=[
-        logging.StreamHandler(),
-        logging.FileHandler(log_path, mode="a", encoding="utf-8"),
-    ],
-)
+
+def configure_logging() -> None:
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    root_logger = logging.getLogger()
+    root_logger.setLevel(logging.INFO)
+    formatter = logging.Formatter("%(asctime)s | %(levelname)-8s | %(name)s - %(message)s")
+
+    for handler in list(root_logger.handlers):
+        if (
+            isinstance(handler, logging.FileHandler)
+            and not isinstance(handler, RotatingFileHandler)
+            and Path(getattr(handler, "baseFilename", "")).resolve() == log_path.resolve()
+        ):
+            root_logger.removeHandler(handler)
+            handler.close()
+
+    file_handler = next(
+        (
+            handler
+            for handler in root_logger.handlers
+            if isinstance(handler, RotatingFileHandler)
+            and Path(getattr(handler, "baseFilename", "")).resolve() == log_path.resolve()
+        ),
+        None,
+    )
+    if file_handler is None:
+        file_handler = RotatingFileHandler(
+            log_path,
+            maxBytes=10 * 1024 * 1024,
+            backupCount=3,
+            encoding="utf-8",
+        )
+        file_handler.setFormatter(formatter)
+        root_logger.addHandler(file_handler)
+
+    if not any(isinstance(handler, logging.StreamHandler) and not isinstance(handler, RotatingFileHandler) for handler in root_logger.handlers):
+        stream_handler = logging.StreamHandler()
+        stream_handler.setFormatter(formatter)
+        root_logger.addHandler(stream_handler)
+
+
+configure_logging()
 
 app = FastAPI(
     title="SLD Inference API",
@@ -56,27 +90,15 @@ def health() -> dict:
 # ── Server logs ──────────────────────────────────────────────────────────────
 @app.get("/logs", tags=["logs"])
 @app.get("/api/logs", tags=["logs"])
-def get_logs(lines: int = 100) -> dict:
+def get_logs(response: Response, lines: int = Query(default=100, ge=1, le=1000)) -> dict:
     """Return the tail of backend.log for live debugging in the UI."""
-    backend_dir = Path(__file__).resolve().parent.parent
-    possible_paths = [
-        backend_dir / "backend.log",
-        Path("/opt/SLD-Inference/backend/backend.log"),
-    ]
-    
-    log_file = None
-    for p in possible_paths:
-        if p.is_file():
-            log_file = p
-            break
-
-    if log_file is None:
+    response.headers["Cache-Control"] = "no-store"
+    if not log_path.is_file():
         return {"logs": "backend.log not found on server yet."}
 
     try:
-        content = log_file.read_text(encoding="utf-8", errors="ignore").splitlines()
-        tail_lines = content[-lines:] if len(content) > lines else content
+        content = log_path.read_text(encoding="utf-8", errors="replace").splitlines()
+        tail_lines = content[-lines:]
         return {"logs": "\n".join(tail_lines)}
     except Exception as exc:
         return {"logs": f"Error reading log file: {exc}"}
-

@@ -148,19 +148,51 @@ async def run_infer(
 
         manifest = wrapper.manifest
         iou_threshold = manifest.get("iou_threshold", 0.50)
-        effective_tiling_mode = req.tiling_mode if req.tiling_mode else manifest.get("tiling_mode", "fixed")
+        effective_tiling_mode = req.tiling_mode or manifest.get("tiling_mode", "fixed")
+        effective_overlap = (
+            req.overlap if req.overlap is not None else manifest.get("overlap", 0.20)
+        )
 
         try:
             if req.use_tiling:
                 if effective_tiling_mode == "adaptive":
                     tiles_info = adaptive_tile_image(
                         pil_image,
-                        target_symbol_px=req.target_symbol_px or manifest.get("target_symbol_px", 48.0),
-                        estimated_symbol_px=req.estimated_symbol_px or manifest.get("estimated_symbol_px", 48.0),
+                        target_symbol_px=(
+                            req.target_symbol_px
+                            if req.target_symbol_px is not None
+                            else manifest.get("target_symbol_px", 48.0)
+                        ),
+                        estimated_symbol_px=(
+                            req.estimated_symbol_px
+                            if req.estimated_symbol_px is not None
+                            else manifest.get("estimated_symbol_px", 48.0)
+                        ),
                         model_input_size=manifest.get("resolution", 640),
-                        overlap=req.overlap,
-                        enable_auto_crop=req.enable_auto_crop or manifest.get("enable_auto_crop", False),
-                        enable_scale_norm=req.enable_scale_norm or manifest.get("enable_scale_norm", False),
+                        overlap=effective_overlap,
+                        enable_auto_crop=(
+                            req.enable_auto_crop
+                            if req.enable_auto_crop is not None
+                            else manifest.get("enable_auto_crop", False)
+                        ),
+                        enable_scale_norm=(
+                            req.enable_scale_norm
+                            if req.enable_scale_norm is not None
+                            else manifest.get("enable_scale_norm", False)
+                        ),
+                        target_reference_height=manifest.get("target_reference_height", 60.0),
+                    )
+                    logger.info(
+                        "Adaptive inference model='%s' image=%sx%s tiles=%d estimated_symbol_px=%.1f "
+                        "target_symbol_px=%.1f crop=%s scale_norm=%s",
+                        model_id,
+                        W,
+                        H,
+                        len(tiles_info),
+                        float(req.estimated_symbol_px if req.estimated_symbol_px is not None else manifest.get("estimated_symbol_px", 48.0)),
+                        float(req.target_symbol_px if req.target_symbol_px is not None else manifest.get("target_symbol_px", 48.0)),
+                        req.enable_auto_crop if req.enable_auto_crop is not None else manifest.get("enable_auto_crop", False),
+                        req.enable_scale_norm if req.enable_scale_norm is not None else manifest.get("enable_scale_norm", False),
                     )
                     adaptive_results = []
                     for tile_resized, tx1, ty1, tw, th, cx1, cy1, s in tiles_info:
@@ -174,8 +206,8 @@ async def run_infer(
                         iou_threshold=iou_threshold,
                     )
                 else:
-                    grid_sz = req.grid_size if req.grid_size else manifest.get("grid_size", 4)
-                    tiles = tile_image(pil_image, grid_size=grid_sz, overlap=req.overlap)
+                    grid_sz = req.grid_size if req.grid_size is not None else manifest.get("grid_size", 4)
+                    tiles = tile_image(pil_image, grid_size=grid_sz, overlap=effective_overlap)
                     tile_results = []
                     for tile, x_off, y_off in tiles:
                         det = await asyncio.to_thread(wrapper.infer, tile)
@@ -203,6 +235,21 @@ async def run_infer(
                         score=float(score),
                     )
                 )
+
+        logger.info(
+            "Inference result model='%s' tiling=%s raw_detections=%d returned_detections=%d",
+            model_id,
+            effective_tiling_mode if req.use_tiling else "disabled",
+            len(detections),
+            len(det_list),
+        )
+        if len(det_list) == 0:
+            logger.warning(
+                "No detections for model='%s'. Check the raw score floor (%.3f), "
+                "adaptive preprocessing, and that the expected checkpoint was loaded.",
+                model_id,
+                settings.min_score_floor,
+            )
 
         detections_dict[model_id] = ModelDetections(
             class_names=manifest.get("class_names", []),

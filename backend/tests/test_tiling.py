@@ -6,7 +6,7 @@ import pytest
 import supervision as sv
 from PIL import Image
 
-from app.tiling import merge_detections, tile_image
+from app.tiling import adaptive_tile_image, merge_detections, tile_image
 
 
 def _solid_image(W: int = 800, H: int = 600, color=(200, 200, 200)) -> Image.Image:
@@ -46,6 +46,14 @@ def test_tile_crops_within_image():
         assert y_off + th <= H
 
 
+def test_tile_grid_reaches_right_and_bottom_edges():
+    W, H = 1000, 800
+    img = _solid_image(W, H)
+    tiles = tile_image(img, grid_size=4, overlap=0.2)
+    assert max(x + tile.size[0] for tile, x, _ in tiles) == W
+    assert max(y + tile.size[1] for tile, _, y in tiles) == H
+
+
 def test_tile_grid_size_1():
     """Grid 1×1 should produce exactly one tile equal to the original image."""
     img = _solid_image(640, 640)
@@ -54,6 +62,20 @@ def test_tile_grid_size_1():
     tile, x, y = tiles[0]
     assert (x, y) == (0, 0)
     assert tile.size == img.size
+
+
+def test_adaptive_grid_matches_training_scale_normalization():
+    img = _solid_image(14044, 9934)
+    tiles = adaptive_tile_image(
+        img,
+        target_symbol_px=48,
+        estimated_symbol_px=210,
+        model_input_size=640,
+        overlap=0.2,
+        enable_scale_norm=True,
+    )
+    assert len(tiles) == 20
+    assert all(tile.size == (640, 640) for tile, *_ in tiles)
 
 
 # ---------------------------------------------------------------------------
