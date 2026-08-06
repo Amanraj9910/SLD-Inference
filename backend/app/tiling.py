@@ -22,17 +22,29 @@ def tile_image(
     Returns a list of (crop, x_offset, y_offset) tuples where the
     offsets give the top-left corner of each tile in the original image.
     """
+    if grid_size < 1:
+        raise ValueError("grid_size must be at least 1")
+    if not 0.0 <= overlap < 1.0:
+        raise ValueError("overlap must be in the range [0, 1)")
+
     W, H = image.size
     tile_w = W // grid_size
     tile_h = H // grid_size
-    step_x = int(tile_w * (1 - overlap))
-    step_y = int(tile_h * (1 - overlap))
+    if tile_w < 1 or tile_h < 1:
+        raise ValueError("grid_size cannot exceed the image dimensions")
+
+    step_x = max(1, int(tile_w * (1 - overlap)))
+    step_y = max(1, int(tile_h * (1 - overlap)))
+
+    positions_x = [gx * step_x for gx in range(grid_size)]
+    positions_y = [gy * step_y for gy in range(grid_size)]
+    if grid_size > 1:
+        positions_x[-1] = max(0, W - tile_w)
+        positions_y[-1] = max(0, H - tile_h)
 
     tiles: list[tuple[Image.Image, int, int]] = []
-    for gy in range(grid_size):
-        for gx in range(grid_size):
-            x = int(gx * step_x)
-            y = int(gy * step_y)
+    for y in positions_y:
+        for x in positions_x:
             x_end = min(x + tile_w, W)
             y_end = min(y + tile_h, H)
             tile = image.crop((x, y, x_end, y_end))
@@ -173,9 +185,13 @@ def adaptive_tile_image(
     cw, ch = cropped_img.size
 
     # 3. Adaptive Grid Size (g_x, g_y)
-    effective_symbol_px = estimated_symbol_px if estimated_symbol_px > 0 else 48.0
-    g_x = max(1, round(target_symbol_px * cw / (model_input_size * effective_symbol_px)))
-    g_y = max(1, round(target_symbol_px * ch / (model_input_size * effective_symbol_px)))
+    effective_symbol_px = (
+        estimated_symbol_px * s if estimated_symbol_px > 0 else target_reference_height
+    )
+    base_g_x = max(1, round(target_symbol_px * new_w / (model_input_size * effective_symbol_px)))
+    base_g_y = max(1, round(target_symbol_px * new_h / (model_input_size * effective_symbol_px)))
+    g_x = max(base_g_x, round(target_symbol_px * cw / (model_input_size * effective_symbol_px)))
+    g_y = max(base_g_y, round(target_symbol_px * ch / (model_input_size * effective_symbol_px)))
 
     tile_w = cw / (g_x - (g_x - 1) * overlap) if g_x > 1 else cw
     tile_h = ch / (g_y - (g_y - 1) * overlap) if g_y > 1 else ch
@@ -265,4 +281,3 @@ def merge_adaptive_detections(
         class_id=np.concatenate(all_classes).astype(int),
     )
     return merged.with_nms(threshold=iou_threshold)
-

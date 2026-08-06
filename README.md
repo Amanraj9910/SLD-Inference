@@ -146,5 +146,6 @@ Vite auto-proxies `/api/*` to `http://localhost:8000` via `vite.config.ts`.
 
 - **num_classes is immutable** — it's baked into the checkpoint's output layer shape. The UI shows it as read-only. Only class *names* and threshold are live-editable.
 - **Score floor** — the API returns all detections with score ≥ 0.05 (configurable via `MIN_SCORE_FLOOR` in `.env`). The threshold slider in the UI filters client-side for instant response.
-- **Tiling** — large SLD images are split into an N×N grid with configurable overlap, inference runs on each tile, then results are merged with per-class NMS.
+- **Tiling** — large SLD images are split into an edge-anchored N×N grid with configurable overlap, inference runs on each tile, then results are merged with per-class NMS. Adaptive D-FINE tiling must use the post-scale median symbol size from the training pipeline; the included 30-class adaptive manifest uses `estimated_symbol_px=210` for approximately 14,044-pixel-wide sheets.
+- **Training metadata** — keep the processed COCO JSON category order next to the checkpoint and copy it into `class_names`; do not use a guessed or background-prefixed list. When `STOP_EPOCH` is used, upload the stage checkpoint that actually achieved the validation metric (`best_stg2.pth` after the stage transition when applicable).
 - **Sequential inference** — models run one at a time to avoid GPU OOM. For multi-GPU setups, enable concurrent execution in the infer router.

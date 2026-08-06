@@ -7,6 +7,7 @@ import { UploadModelModal } from './components/UploadModelModal';
 import { LogsModal } from './components/LogsModal';
 import { JSONOutputModal } from './components/JSONOutputModal';
 import { Legend } from './components/Legend';
+import { downloadAnnotatedImage } from './utils/exportImage';
 import {
   Eye,
   EyeOff,
@@ -17,6 +18,7 @@ import {
   Zap,
   Terminal,
   Braces,
+  Download,
 } from 'lucide-react';
 
 export default function App() {
@@ -33,11 +35,17 @@ export default function App() {
     showOcr,
     toggleShowOcr,
     detectionResults,
+    currentImageFile,
+    models,
+    thresholds,
+    visibleModels,
+    inferSettings,
   } = useAppStore();
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [logsOpen, setLogsOpen] = useState(false);
   const [jsonOutputOpen, setJsonOutputOpen] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
 
   // Fetch models on mount
   useEffect(() => {
@@ -67,6 +75,27 @@ export default function App() {
     Object.keys(detectionResults.detections || {}).length > 0 ||
     ((detectionResults.ocr || []).length > 0);
   const canRunInfer = selectedModelIds.size > 0 && currentImageUrl !== null;
+
+  const handleDownload = async () => {
+    if (!currentImageUrl || !currentImageFile || !hasResults) return;
+    setIsExporting(true);
+    try {
+      await downloadAnnotatedImage({
+        imageUrl: currentImageUrl,
+        originalFileName: currentImageFile.name,
+        results: detectionResults,
+        models,
+        thresholds,
+        visibleModels,
+        inferSettings,
+        includeOcr: showOcr,
+      });
+    } catch (error) {
+      console.error('Failed to export annotated image', error);
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   return (
     <div className="h-screen flex flex-col bg-slate-50 text-slate-900">
@@ -139,6 +168,16 @@ export default function App() {
         >
           <Braces size={14} className="text-indigo-600" />
           <span>JSON Output</span>
+        </button>
+
+        <button
+          onClick={handleDownload}
+          disabled={!hasResults || isExporting}
+          className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:text-slate-900 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-sm"
+          title="Download annotated image"
+        >
+          {isExporting ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} className="text-emerald-600" />}
+          <span>Download Image</span>
         </button>
 
         {/* Upload button */}
