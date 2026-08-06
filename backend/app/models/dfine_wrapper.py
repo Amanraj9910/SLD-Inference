@@ -179,6 +179,15 @@ class DFINEWrapper(BaseModelWrapper):
 
         self._device = "cuda" if torch.cuda.is_available() else "cpu"
         self._model = _DFINEInferModel(cfg).to(self._device).eval()
+
+        # Dynamic patch for D-FINE's duplicate-registration device mismatch bug
+        decoder = getattr(self._model.model, "decoder", None)
+        if decoder is not None:
+            if hasattr(decoder, "anchors") and torch.is_tensor(decoder.anchors):
+                decoder.anchors = decoder.anchors.to(self._device)
+            if hasattr(decoder, "valid_mask") and torch.is_tensor(decoder.valid_mask):
+                decoder.valid_mask = decoder.valid_mask.to(self._device)
+
         logger.info("D-FINE loaded on %s from %s", self._device, weights_path)
 
         # ── 5. Build transform (matches training pipeline exactly) ───────
@@ -205,7 +214,20 @@ class DFINEWrapper(BaseModelWrapper):
         boxes  = boxes[0].cpu().numpy().astype(np.float32)
         scores = scores[0].cpu().numpy().astype(np.float32)
 
+        logger.info(
+            "DFINE wrapper infer stats - Model: %s, Device: %s, Max score: %.4f, Min score: %.4f, Floor: %.4f, Shapes: labels=%s, boxes=%s, scores=%s",
+            getattr(self, "model_id", "unknown"),
+            self._device,
+            float(scores.max()) if len(scores) > 0 else 0.0,
+            float(scores.min()) if len(scores) > 0 else 0.0,
+            self._floor,
+            labels.shape,
+            boxes.shape,
+            scores.shape
+        )
+
         keep = scores >= self._floor
+        logger.info("DFINE wrapper kept detections count: %d", int(keep.sum()))
         if not keep.any():
             return sv.Detections.empty()
 

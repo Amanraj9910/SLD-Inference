@@ -124,9 +124,8 @@ def get_or_load(model_id: str) -> BaseModelWrapper:
     if model_id in _registry:
         return _registry[model_id]
 
-    # Ensure manifests are populated
-    if not _manifests:
-        scan()
+    # Always refresh manifests to prevent stale caches (especially after manual edits)
+    scan()
 
     if model_id not in _manifests:
         raise KeyError(f"Model '{model_id}' not found in weights/")
