@@ -16,8 +16,9 @@ if [ -d ".venv" ]; then
 fi
 
 echo "Starting SLD Inference API..."
-uvicorn app.main:app \
+exec uvicorn app.main:app \
     --host 0.0.0.0 \
     --port 8000 \
     --workers 1 \
+    --timeout-keep-alive "${UVICORN_TIMEOUT_KEEP_ALIVE:-300}" \
     --log-level info

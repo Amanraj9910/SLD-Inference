@@ -28,19 +28,25 @@ def tile_image(
         raise ValueError("overlap must be in the range [0, 1)")
 
     W, H = image.size
-    tile_w = W // grid_size
-    tile_h = H // grid_size
+    # Size tiles from the requested overlap. Dividing into non-overlapping
+    # quarters then shortening the stride leaves a gap before the final tile.
+    denominator = grid_size - (grid_size - 1) * overlap
+    tile_w = int(np.ceil(W / denominator))
+    tile_h = int(np.ceil(H / denominator))
     if tile_w < 1 or tile_h < 1:
         raise ValueError("grid_size cannot exceed the image dimensions")
 
-    step_x = max(1, int(tile_w * (1 - overlap)))
-    step_y = max(1, int(tile_h * (1 - overlap)))
-
-    positions_x = [gx * step_x for gx in range(grid_size)]
-    positions_y = [gy * step_y for gy in range(grid_size)]
-    if grid_size > 1:
-        positions_x[-1] = max(0, W - tile_w)
-        positions_y[-1] = max(0, H - tile_h)
+    max_x_start = max(0, W - tile_w)
+    max_y_start = max(0, H - tile_h)
+    if grid_size == 1:
+        positions_x = [0]
+        positions_y = [0]
+    else:
+        # Interpolate starts between both image edges. This preserves the
+        # requested number of tiles and guarantees adjacent integer crops meet
+        # or overlap, even when rounding a nominal stride would create a gap.
+        positions_x = [round(gx * max_x_start / (grid_size - 1)) for gx in range(grid_size)]
+        positions_y = [round(gy * max_y_start / (grid_size - 1)) for gy in range(grid_size)]
 
     tiles: list[tuple[Image.Image, int, int]] = []
     for y in positions_y:

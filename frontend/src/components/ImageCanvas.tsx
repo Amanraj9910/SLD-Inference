@@ -5,7 +5,6 @@ import { Stage, Layer, Image as KonvaImage, Rect, Text, Group } from 'react-konv
 import { useAppStore } from '../store/appStore';
 import { classColor } from '../utils/palette';
 import type { Detection } from '../store/appStore';
-import { ZoomIn, ZoomOut, RotateCcw, Move } from 'lucide-react';
 
 interface CanvasSize { w: number; h: number; }
 
@@ -16,7 +15,7 @@ interface Tooltip {
   color: string;
 }
 
-export function ImageCanvas() {
+export function ImageCanvas({ modelId }: { modelId?: string }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<Konva.Stage>(null);
   const [canvasSize, setCanvasSize] = useState<CanvasSize>({ w: 800, h: 600 });
@@ -24,10 +23,6 @@ export function ImageCanvas() {
   const [imageNaturalSize, setImageNaturalSize] = useState({ w: 1, h: 1 });
   const [tooltip, setTooltip] = useState<Tooltip | null>(null);
   const [hoveredKey, setHoveredKey] = useState<string | null>(null);
-
-  // ── Zoom & Pan State ─────────────────────────────────────────────────────
-  const [zoomScale, setZoomScale] = useState(1);
-  const [stagePos, setStagePos] = useState({ x: 0, y: 0 });
 
   const {
     currentImageUrl,
@@ -37,13 +32,12 @@ export function ImageCanvas() {
     showLabels,
     models,
     showOcr,
+    zoomScale,
+    setZoomScale,
+    stagePos,
+    setStagePos,
+    resetZoom,
   } = useAppStore();
-
-  // Reset zoom & position when a new image is loaded
-  const resetZoom = useCallback(() => {
-    setZoomScale(1);
-    setStagePos({ x: 0, y: 0 });
-  }, []);
 
   // ── Resize observer ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -98,11 +92,7 @@ export function ImageCanvas() {
     });
   };
 
-  const handleZoomBtn = (direction: 'in' | 'out') => {
-    const factor = direction === 'in' ? 1.25 : 0.8;
-    const newScale = Math.max(0.5, Math.min(15, zoomScale * factor));
-    setZoomScale(newScale);
-  };
+
 
   // ── Collect all visible detections ───────────────────────────────────────
   const visibleDetections: Array<{
@@ -115,10 +105,11 @@ export function ImageCanvas() {
   }> = [];
 
   const detectionsObj = detectionResults.detections || {};
-  for (const [modelId, modelDets] of Object.entries(detectionsObj)) {
-    if (!visibleModels[modelId]) continue;
-    const threshold = thresholds[modelId] ?? 0;
-    const modelInfo = models.find(m => m.model_id === modelId);
+  for (const [mId, modelDets] of Object.entries(detectionsObj)) {
+    if (modelId && mId !== modelId) continue;
+    if (!visibleModels[mId]) continue;
+    const threshold = thresholds[mId] ?? 0;
+    const modelInfo = models.find(m => m.model_id === mId);
     const arch = modelInfo?.arch ?? 'dfine';
 
     modelDets.detections
@@ -127,8 +118,8 @@ export function ImageCanvas() {
         const className =
           modelDets.class_names[det.class_id] ?? `class_${det.class_id}`;
         visibleDetections.push({
-          key: `${modelId}-${idx}`,
-          modelId,
+          key: `${mId}-${idx}`,
+          modelId: mId,
           arch,
           det,
           className,
@@ -195,6 +186,9 @@ export function ImageCanvas() {
         y={stagePos.y}
         draggable={true}
         onWheel={handleWheel}
+        onDragMove={e => {
+          setStagePos({ x: e.target.x(), y: e.target.y() });
+        }}
         onDragEnd={e => {
           setStagePos({ x: e.target.x(), y: e.target.y() });
         }}
@@ -351,38 +345,6 @@ export function ImageCanvas() {
           )}
         </Layer>
       </Stage>
-
-      {/* Floating Toolbar — Zoom Controls */}
-      <div className="absolute bottom-4 right-4 glass rounded-xl px-2 py-1.5 flex items-center gap-1.5 border border-slate-700/60 shadow-xl z-20">
-        <button
-          onClick={() => handleZoomBtn('out')}
-          className="p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 transition-all"
-          title="Zoom out"
-        >
-          <ZoomOut size={16} />
-        </button>
-        <span className="text-xs text-slate-300 font-mono font-medium px-1.5 tabular-nums min-w-12 text-center">
-          {Math.round(zoomScale * 100)}%
-        </span>
-        <button
-          onClick={() => handleZoomBtn('in')}
-          className="p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 transition-all"
-          title="Zoom in"
-        >
-          <ZoomIn size={16} />
-        </button>
-        <div className="h-4 w-px bg-slate-700/60 mx-0.5" />
-        <button
-          onClick={resetZoom}
-          className="p-1.5 rounded-lg text-slate-400 hover:text-cyan-400 hover:bg-slate-800/60 transition-all"
-          title="Reset zoom & position"
-        >
-          <RotateCcw size={15} />
-        </button>
-        <div className="text-[10px] text-slate-500 flex items-center gap-1 pl-1">
-          <Move size={12} /> Drag to Pan
-        </div>
-      </div>
 
       {/* Detection count badge */}
       {(visibleDetections.length > 0 || visibleOcr.length > 0) && (

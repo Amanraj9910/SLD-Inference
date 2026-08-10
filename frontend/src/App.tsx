@@ -7,6 +7,7 @@ import { UploadModelModal } from './components/UploadModelModal';
 import { LogsModal } from './components/LogsModal';
 import { JSONOutputModal } from './components/JSONOutputModal';
 import { Legend } from './components/Legend';
+import { ZoomControls } from './components/ZoomControls';
 import { downloadAnnotatedImage } from './utils/exportImage';
 import {
   Eye,
@@ -41,6 +42,8 @@ export default function App() {
     visibleModels,
     inferSettings,
   } = useAppStore();
+
+  const selectedModels = models.filter(m => selectedModelIds.has(m.model_id));
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [logsOpen, setLogsOpen] = useState(false);
@@ -241,7 +244,45 @@ export default function App() {
             onDrop={handleDrop}
           >
             {currentImageUrl ? (
-              <ImageCanvas />
+              <div className="flex-1 relative flex flex-col min-h-0 w-full h-full">
+                {selectedModels.length > 1 ? (
+                  <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-4 p-4 h-full min-h-0 overflow-y-auto">
+                    {selectedModels.map(model => (
+                      <div key={model.model_id} className="flex flex-col h-full min-h-[400px] border border-slate-200 rounded-2xl overflow-hidden bg-white shadow-sm relative">
+                        {/* Header showing Model Name */}
+                        <div className="bg-slate-50/90 backdrop-blur px-4 py-2.5 border-b border-slate-200/80 flex items-center justify-between shrink-0 select-none">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <div className={`w-2 h-2 rounded-full shrink-0 ${model.loaded ? 'bg-emerald-500 animate-pulse' : 'bg-slate-300'}`} />
+                            <span className="text-xs font-bold text-slate-800 tracking-tight truncate" title={model.display_name}>
+                              {model.display_name}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                            <span className={`text-[9px] font-extrabold uppercase tracking-wider px-1.5 py-0.5 rounded-md border ${
+                              model.arch === 'dfine'
+                                ? 'bg-cyan-50 text-cyan-700 border-cyan-200'
+                                : 'bg-amber-50 text-amber-700 border-amber-200'
+                            }`}>
+                              {model.arch}
+                            </span>
+                            {model.loaded && (
+                              <span className="text-[9px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200/60 px-1.5 py-0.5 rounded-md">
+                                GPU
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex-1 min-h-0 relative flex">
+                          <ImageCanvas modelId={model.model_id} />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <ImageCanvas modelId={selectedModels[0]?.model_id} />
+                )}
+                <ZoomControls />
+              </div>
             ) : (
               <div className="text-center space-y-3 p-8">
                 <div className="w-14 h-14 mx-auto rounded-2xl bg-white border border-slate-200 flex items-center justify-center shadow-sm">

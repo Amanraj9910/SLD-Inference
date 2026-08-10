@@ -13,6 +13,30 @@ Browser  ──HTTP──▶  Nginx (:80)
 
 ## Quick start (GPU box — Ubuntu)
 
+For a production Ubuntu NVIDIA GPU VM, the one-command installer is the
+recommended path. It validates the NVIDIA driver and PyTorch CUDA access,
+builds the frontend, configures Nginx, and installs a self-restarting systemd
+service:
+
+```bash
+cd /opt/sld-inference
+sudo bash setup_and_run.sh
+```
+
+The script uses the current checkout as the application directory. If the VM
+driver only supports an older CUDA runtime, select a compatible PyTorch wheel
+index before running it, for example:
+
+```bash
+TORCH_INDEX_URL=https://download.pytorch.org/whl/cu121 sudo bash setup_and_run.sh
+```
+
+It keeps a tiled-inference request alive for up to one hour at Nginx, while the
+browser client has no shorter request timeout. Inspect a running server with
+`journalctl -u sld-inference -f`.
+
+### Manual setup
+
 ### 1. Clone & set up backend
 
 ```bash
@@ -70,7 +94,7 @@ npm run build      # outputs to frontend/dist/
 
 ```bash
 sudo apt install nginx -y
-sudo cp nginx/sld-inference.conf /etc/nginx/sites-available/sld-inference
+sudo sed "s|__APP_DIR__|/opt/sld-inference|g" /opt/sld-inference/nginx/sld-inference.conf > /etc/nginx/sites-available/sld-inference
 sudo ln -s /etc/nginx/sites-available/sld-inference /etc/nginx/sites-enabled/
 sudo rm -f /etc/nginx/sites-enabled/default
 sudo nginx -t && sudo systemctl reload nginx
@@ -146,6 +170,6 @@ Vite auto-proxies `/api/*` to `http://localhost:8000` via `vite.config.ts`.
 
 - **num_classes is immutable** — it's baked into the checkpoint's output layer shape. The UI shows it as read-only. Only class *names* and threshold are live-editable.
 - **Score floor** — the API returns all detections with score ≥ 0.05 (configurable via `MIN_SCORE_FLOOR` in `.env`). The threshold slider in the UI filters client-side for instant response.
-- **Tiling** — large SLD images are split into an edge-anchored N×N grid with configurable overlap, inference runs on each tile, then results are merged with per-class NMS. Adaptive D-FINE tiling must use the post-scale median symbol size from the training pipeline; the included 30-class adaptive manifest uses `estimated_symbol_px=210` for approximately 14,044-pixel-wide sheets.
+- **Tiling** — large SLD images are split into a fully covered, overlapping N×N grid, inference runs on each tile, then results are merged with per-class NMS. The fixed-grid geometry is regression-tested to prevent uncovered horizontal or vertical bands. Adaptive D-FINE tiling must use the post-scale median symbol size from the training pipeline; the included 30-class adaptive manifest uses `estimated_symbol_px=210` for approximately 14,044-pixel-wide sheets.
 - **Training metadata** — keep the processed COCO JSON category order next to the checkpoint and copy it into `class_names`; do not use a guessed or background-prefixed list. When `STOP_EPOCH` is used, upload the stage checkpoint that actually achieved the validation metric (`best_stg2.pth` after the stage transition when applicable).
 - **Sequential inference** — models run one at a time to avoid GPU OOM. For multi-GPU setups, enable concurrent execution in the infer router.

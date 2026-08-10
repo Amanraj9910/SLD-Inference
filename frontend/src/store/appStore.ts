@@ -144,6 +144,13 @@ interface AppState {
   inferError: string | null;
   runInfer: () => Promise<void>;
 
+  // Zoom & Pan state (globally synchronized across canvases)
+  zoomScale: number;
+  stagePos: { x: number; y: number };
+  setZoomScale: (zoom: number) => void;
+  setStagePos: (pos: { x: number; y: number }) => void;
+  resetZoom: () => void;
+
   // Config modal
   configModalModelId: string | null;
   openConfigModal: (modelId: string) => void;
@@ -328,8 +335,17 @@ export const useAppStore = create<AppState>((set, get) => ({
       imageDimensions: null,
       detectionResults: { detections: {}, ocr: null },
       inferError: null,
+      zoomScale: 1,
+      stagePos: { x: 0, y: 0 },
     });
   },
+
+  // ── Zoom & Pan ───────────────────────────────────────────────────────────
+  zoomScale: 1,
+  stagePos: { x: 0, y: 0 },
+  setZoomScale: (zoomScale) => set({ zoomScale }),
+  setStagePos: (stagePos) => set({ stagePos }),
+  resetZoom: () => set({ zoomScale: 1, stagePos: { x: 0, y: 0 } }),
 
   // ── Inference ────────────────────────────────────────────────────────────
   detectionResults: { detections: {}, ocr: null },

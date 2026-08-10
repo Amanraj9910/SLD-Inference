@@ -131,18 +131,26 @@ async def run_infer(
     W, H = pil_image.size
     detections_dict: dict[str, ModelDetections] = {}
 
-    # ── Run OCR in parallel with GPU model loading/inference if enabled ──
-    ocr_task = run_azure_ocr(image_bytes)
+    # Start OCR immediately so its network wait overlaps GPU loading and
+    # tiled inference. Keeping this as a bare coroutine delayed OCR until all
+    # GPU work had already finished.
+    ocr_task = asyncio.create_task(run_azure_ocr(image_bytes))
 
     # ── Run each model sequentially (safe on single GPU) ─────────────────
     for model_id in req.model_ids:
         try:
-            wrapper = registry.get_or_load(model_id)
+            # Checkpoint deserialization can take minutes for a large model.
+            # Do it off the event loop so health checks and other requests
+            # remain responsive while this request is starting.
+            wrapper = await asyncio.to_thread(registry.get_or_load, model_id)
         except KeyError:
+            ocr_task.cancel()
             raise HTTPException(status_code=404, detail=f"Model '{model_id}' manifest not found.")
         except (FileNotFoundError, ValueError) as exc:
+            ocr_task.cancel()
             raise HTTPException(status_code=400, detail=str(exc))
         except Exception as exc:
+            ocr_task.cancel()
             logger.exception("Failed to load model '%s'", model_id)
             raise HTTPException(status_code=500, detail=f"Model load error: {exc}")
 
@@ -217,6 +225,7 @@ async def run_infer(
                 detections = await asyncio.to_thread(wrapper.infer, pil_image)
 
         except Exception as exc:
+            ocr_task.cancel()
             logger.exception("Inference failed for model '%s'", model_id)
             raise HTTPException(status_code=500, detail=f"Inference error ({model_id}): {exc}")
 
