@@ -1,168 +1,183 @@
 #!/usr/bin/env bash
-# ─────────────────────────────────────────────────────────────────────────────
-# SLD Multi-Model Inference Viewer — One-Click Automated Setup & Deployment Script
-# ─────────────────────────────────────────────────────────────────────────────
-# Run this script on your Alibaba Cloud Ubuntu GPU instance:
-#   cd /opt/SLD-Inference
-#   bash setup_and_run.sh
-# ─────────────────────────────────────────────────────────────────────────────
-set -e
+# Deploy the complete SLD Inference Viewer on an Ubuntu NVIDIA GPU VM.
+# Run from the checked-out repository: sudo bash setup_and_run.sh
+set -Eeuo pipefail
 
-# Color helpers
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
 CYAN='\033[0;36m'
-NC='\033[0m' # No Color
+NC='\033[0m'
+log_info() { echo -e "${CYAN}[INFO]${NC} $*"; }
+log_ok() { echo -e "${GREEN}[OK]${NC} $*"; }
+log_warn() { echo -e "${YELLOW}[WARN]${NC} $*"; }
+log_error() { echo -e "${RED}[ERROR]${NC} $*" >&2; }
+trap 'log_error "Setup failed at line $LINENO. Review the command above and rerun after fixing it."' ERR
 
-log_info()    { echo -e "${CYAN}[INFO]${NC} $1"; }
-log_success() { echo -e "${GREEN}[SUCCESS]${NC} $1"; }
-log_warn()    { echo -e "${YELLOW}[WARNING]${NC} $1"; }
-log_error()   { echo -e "${RED}[ERROR]${NC} $1"; }
-
-echo -e "${BLUE}"
-echo "=========================================================================="
-echo "          SLD MULTI-MODEL INFERENCE VIEWER - AUTOMATED SETUP             "
-echo "=========================================================================="
-echo -e "${NC}"
-
-# 1. Root permission check
-if [ "$EUID" -ne 0 ]; then
-  log_error "Please run as root (or with sudo)."
-  exit 1
+if [[ ${EUID} -ne 0 ]]; then
+    log_error "Run with sudo: sudo bash setup_and_run.sh"
+    exit 1
 fi
 
-APP_DIR="/opt/SLD-Inference"
-DFINE_DIR="/opt/D-FINE"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+APP_DIR="${APP_DIR:-$SCRIPT_DIR}"
+DFINE_DIR="${DFINE_DIR:-$APP_DIR/D-FINE}"
+APP_USER="${APP_USER:-sldinference}"
+TORCH_INDEX_URL="${TORCH_INDEX_URL:-https://download.pytorch.org/whl/cu124}"
 
-# Ensure we are in the application root
-if [ ! -d "$APP_DIR" ]; then
-    log_info "Creating application directory at $APP_DIR ..."
-    mkdir -p "$APP_DIR"
-fi
-cd "$APP_DIR"
+for required_dir in backend frontend nginx; do
+    [[ -d "$APP_DIR/$required_dir" ]] || {
+        log_error "APP_DIR='$APP_DIR' is not the SLD-Inference repository (missing $required_dir/)."
+        exit 1
+    }
+done
 
-# 2. System dependencies
-log_info "1/7 Updating system packages and installing required OS tools..."
+log_info "Deploying from $APP_DIR"
+log_info "Installing Ubuntu packages..."
+export DEBIAN_FRONTEND=noninteractive
 apt-get update -y
-apt-get install -y python3-venv python3-pip git nginx curl net-tools procps
+apt-get install -y python3 python3-venv python3-pip python3-dev build-essential \
+    git nginx curl ca-certificates libgl1 libglib2.0-0 net-tools procps
 
-# 3. Node.js & npm installation check
-log_info "2/7 Checking Node.js & npm..."
-if ! command -v node &> /dev/null || [ $(node -v | cut -d'.' -f1 | tr -d 'v') -lt 18 ]; then
-    log_info "Node.js 18+ not detected. Installing Node.js 20 LTS from NodeSource..."
-    curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+if ! command -v nvidia-smi >/dev/null 2>&1; then
+    log_error "No NVIDIA driver is available. Use an NVIDIA GPU VM/image, install its driver, reboot, then rerun."
+    exit 1
+fi
+log_ok "NVIDIA driver detected: $(nvidia-smi --query-gpu=name --format=csv,noheader | paste -sd ', ' -)"
+
+if ! command -v node >/dev/null 2>&1 || [[ "$(node -v | sed 's/^v//' | cut -d. -f1)" -lt 18 ]]; then
+    log_info "Installing Node.js 20 LTS..."
+    curl --fail --show-error --location --retry 3 https://deb.nodesource.com/setup_20.x | bash -
     apt-get install -y nodejs
 fi
-log_success "Node.js $(node -v) & npm $(npm -v) ready."
+log_ok "Node.js $(node -v), npm $(npm -v)"
 
-# 4. Clone D-FINE repository if missing
-log_info "3/7 Checking D-FINE architecture repository..."
-if [ ! -d "$DFINE_DIR" ]; then
-    log_info "Cloning D-FINE repository to $DFINE_DIR ..."
+if [[ ! -d "$DFINE_DIR" ]]; then
+    log_info "D-FINE is not bundled; cloning it to $DFINE_DIR..."
     git clone --depth 1 https://github.com/Peterande/D-FINE.git "$DFINE_DIR"
-    log_success "D-FINE repository cloned."
-else
-    log_success "D-FINE repository already present at $DFINE_DIR."
 fi
+[[ -f "$DFINE_DIR/requirements.txt" ]] || { log_error "Invalid D-FINE directory: $DFINE_DIR"; exit 1; }
 
-# 5. Python Environment & Backend Setup
-log_info "4/7 Setting up Python backend virtual environment & dependencies..."
+if ! id -u "$APP_USER" >/dev/null 2>&1; then
+    useradd --system --create-home --home-dir "/var/lib/$APP_USER" --shell /usr/sbin/nologin "$APP_USER"
+fi
+for gpu_group in video render; do
+    if getent group "$gpu_group" >/dev/null; then
+        usermod -aG "$gpu_group" "$APP_USER"
+    fi
+done
+chown -R "$APP_USER:$APP_USER" "$APP_DIR"
+
+log_info "Creating Python environment and installing CUDA-enabled PyTorch..."
 cd "$APP_DIR/backend"
-
-if [ ! -d ".venv" ]; then
+if [[ ! -d .venv ]]; then
     python3 -m venv .venv
 fi
 source .venv/bin/activate
+python -m pip install --upgrade pip wheel setuptools
+# Install PyTorch first from the CUDA wheel repository. The index can be
+# overridden for a VM with a different supported CUDA driver, for example:
+# TORCH_INDEX_URL=https://download.pytorch.org/whl/cu121 sudo bash setup_and_run.sh
+python -m pip install --upgrade torch torchvision --index-url "$TORCH_INDEX_URL"
+python -m pip install -r requirements.txt
+python -m pip install -r "$DFINE_DIR/requirements.txt"
+python - <<'PY'
+import torch
+assert torch.cuda.is_available(), (
+    "PyTorch cannot access CUDA. Check the NVIDIA driver and set TORCH_INDEX_URL "
+    "to a wheel compatible with that driver before rerunning setup."
+)
+print(f"PyTorch {torch.__version__} using CUDA {torch.version.cuda} on {torch.cuda.get_device_name(0)}")
+PY
+log_ok "Python dependencies and CUDA verified."
 
-pip install --upgrade pip -q
-pip install -r requirements.txt -q
-if [ -f "$DFINE_DIR/requirements.txt" ]; then
-    pip install -r "$DFINE_DIR/requirements.txt" -q
-fi
-log_success "Backend Python dependencies installed."
+ENV_FILE="$APP_DIR/backend/.env"
+touch "$ENV_FILE"
+set_env() {
+    local key="$1" value="$2"
+    if grep -qE "^${key}=" "$ENV_FILE"; then
+        sed -i "s|^${key}=.*|${key}=${value}|" "$ENV_FILE"
+    else
+        printf '%s=%s\n' "$key" "$value" >> "$ENV_FILE"
+    fi
+}
+set_env WEIGHTS_DIR "$APP_DIR/backend/weights"
+set_env DFINE_REPO_PATH "$DFINE_DIR"
+set_env MIN_SCORE_FLOOR "0.05"
+set_env CORS_ORIGINS '["*"]'
+chown "$APP_USER:$APP_USER" "$ENV_FILE"
 
-# Configure .env file
-log_info "Configuring backend .env settings..."
-cat <<EOF > .env
-WEIGHTS_DIR=$APP_DIR/backend/weights
-DFINE_REPO_PATH=$DFINE_DIR
-MIN_SCORE_FLOOR=0.05
-CORS_ORIGINS=["*"]
-EOF
-log_success "Created/updated $APP_DIR/backend/.env"
+for manifest in "$APP_DIR"/backend/weights/*/manifest.json; do
+    [[ -f "$manifest" ]] || continue
+    weight_file="$(python -c "import json; print(json.load(open('$manifest'))['weights_file'])")"
+    weight_path="$(dirname "$manifest")/$weight_file"
+    if [[ -s "$weight_path" ]]; then
+        log_ok "Found checkpoint: $weight_path"
+    else
+        log_warn "Checkpoint missing: $weight_path"
+    fi
+done
 
-# Verify Weight Files
-echo ""
-echo "------------------- WEIGHT FILES AUDIT -------------------"
-DFINE_WEIGHT="$APP_DIR/backend/weights/dfine/best_stg1.pth"
-RFDETR_WEIGHT="$APP_DIR/backend/weights/rfdetr/checkpoint_best_regular.pth"
-
-if [ -f "$DFINE_WEIGHT" ]; then
-    log_success "D-FINE weights found: $DFINE_WEIGHT"
-else
-    log_warn "D-FINE weights MISSING at: $DFINE_WEIGHT"
-    log_warn "Please upload your best_stg1.pth to $APP_DIR/backend/weights/dfine/"
-fi
-
-if [ -f "$RFDETR_WEIGHT" ]; then
-    log_success "RF-DETR weights found: $RFDETR_WEIGHT"
-else
-    log_warn "RF-DETR weights MISSING at: $RFDETR_WEIGHT"
-    log_warn "Please upload your checkpoint_best_regular.pth to $APP_DIR/backend/weights/rfdetr/"
-fi
-echo "----------------------------------------------------------"
-echo ""
-
-# 6. Frontend Build
-log_info "5/7 Installing frontend dependencies and building static bundle..."
+log_info "Building the React frontend..."
 cd "$APP_DIR/frontend"
-npm install --silent
+npm ci --no-audit --no-fund
 npm run build
-log_success "Frontend built successfully at $APP_DIR/frontend/dist"
+chown -R "$APP_USER:$APP_USER" "$APP_DIR/frontend/dist"
 
-# 7. Configure Nginx
-log_info "6/7 Configuring Nginx web server..."
-cp "$APP_DIR/nginx/sld-inference.conf" /etc/nginx/sites-available/sld-inference
-ln -sf /etc/nginx/sites-available/sld-inference /etc/nginx/sites-enabled/sld-inference
+log_info "Installing Nginx and systemd configuration..."
+sed "s|__APP_DIR__|$APP_DIR|g" "$APP_DIR/nginx/sld-inference.conf" \
+    > /etc/nginx/sites-available/sld-inference
+ln -sfn /etc/nginx/sites-available/sld-inference /etc/nginx/sites-enabled/sld-inference
 rm -f /etc/nginx/sites-enabled/default
-
 nginx -t
+
+cat > /etc/systemd/system/sld-inference.service <<EOF
+[Unit]
+Description=SLD GPU Inference API
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=$APP_USER
+Group=$APP_USER
+WorkingDirectory=$APP_DIR/backend
+EnvironmentFile=-$APP_DIR/backend/.env
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+ExecStart=$APP_DIR/backend/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000 --workers 1 --timeout-keep-alive 300 --log-level info
+Restart=always
+RestartSec=5
+TimeoutStartSec=0
+TimeoutStopSec=90
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+systemctl daemon-reload
+systemctl enable --now sld-inference
+systemctl enable --now nginx
+
+log_info "Waiting for API health check..."
+for attempt in {1..30}; do
+    if curl --fail --silent --show-error --max-time 5 http://127.0.0.1:8000/health | grep -q '"status":"ok"'; then
+        log_ok "API is healthy."
+        break
+    fi
+    if [[ "$attempt" -eq 30 ]]; then
+        systemctl --no-pager --full status sld-inference || true
+        journalctl -u sld-inference -n 100 --no-pager || true
+        log_error "API did not become healthy."
+        exit 1
+    fi
+    sleep 2
+done
+
 systemctl reload nginx
-log_success "Nginx configured and reloaded."
-
-# 8. Start Backend Service
-log_info "7/7 Starting FastAPI Uvicorn backend..."
-cd "$APP_DIR/backend"
-
-# Terminate existing uvicorn instances if any
-pkill -f "uvicorn app.main:app" || true
-sleep 1
-
-# Start server in background
-nohup .venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 1 > "$APP_DIR/backend/backend.log" 2>&1 &
-
-sleep 3
-
-# Health check test
-if curl -s http://127.0.0.1:8000/health | grep -q "ok"; then
-    log_success "FastAPI Backend is running and HEALTHY on port 8000!"
-else
-    log_error "FastAPI Backend failed to respond to health check. Check logs at: $APP_DIR/backend/backend.log"
-fi
-
-# Detect Public IP
-PUBLIC_IP=$(curl -s ifconfig.me || curl -s icanhazip.com || echo "YOUR-SERVER-IP")
-
-echo ""
-echo -e "${GREEN}=========================================================================="
-echo "                  DEPLOYMENT COMPLETE & READY TO USE!                     "
-echo "=========================================================================="
-echo -e "${NC}"
-echo -e "Access your viewer at:  ${CYAN}http://${PUBLIC_IP}/${NC}"
-echo -e "Backend health status: ${CYAN}http://${PUBLIC_IP}/health${NC}"
-echo -e "Backend log file:      ${CYAN}$APP_DIR/backend/backend.log${NC}"
-echo ""
-echo -e "${YELLOW}Important Reminder:${NC} Make sure Port 80 (HTTP) is allowed in your Alibaba Cloud ECS Security Group Rules."
-echo ""
+PUBLIC_IP="$(curl --fail --silent --show-error --connect-timeout 3 --max-time 5 https://ifconfig.me 2>/dev/null || true)"
+PUBLIC_IP="${PUBLIC_IP:-YOUR-SERVER-IP}"
+log_ok "Deployment complete. Open: http://$PUBLIC_IP/"
+echo "Logs: journalctl -u sld-inference -f"
+echo "The proxy allows one hour for a single tiled inference request; the browser client has no shorter timeout."

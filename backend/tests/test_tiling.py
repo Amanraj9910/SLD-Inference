@@ -54,6 +54,23 @@ def test_tile_grid_reaches_right_and_bottom_edges():
     assert max(y + tile.size[1] for tile, _, y in tiles) == H
 
 
+def test_tile_grid_has_no_uncovered_bands_with_overlap():
+    """Every image pixel must belong to at least one tile."""
+    W, H = 1000, 800
+    covered = np.zeros((H, W), dtype=bool)
+    for tile, x_off, y_off in tile_image(_solid_image(W, H), grid_size=4, overlap=0.2):
+        tile_w, tile_h = tile.size
+        covered[y_off:y_off + tile_h, x_off:x_off + tile_w] = True
+    assert covered.all()
+
+
+def test_tile_grid_handles_short_image_dimension():
+    """Rounding must not produce an inverted crop near a short edge."""
+    tiles = tile_image(_solid_image(205, 6), grid_size=6, overlap=0.2)
+    assert len(tiles) == 36
+    assert all(y_off + tile.size[1] <= 6 for tile, _, y_off in tiles)
+
+
 def test_tile_grid_size_1():
     """Grid 1×1 should produce exactly one tile equal to the original image."""
     img = _solid_image(640, 640)

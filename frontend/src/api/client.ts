@@ -7,7 +7,9 @@ const BASE = import.meta.env.VITE_API_BASE_URL ?? '/api';
 
 const http = axios.create({
   baseURL: BASE,
-  timeout: 300_000, // 5 min — tiled inference can be slow
+  // Long GPU inference is governed by the server-side Nginx limit, not a
+  // shorter browser timer.
+  timeout: 0,
 });
 
 export const api = {
@@ -122,7 +124,7 @@ export const api = {
     return http
       .post<ModelInfo>('/models/upload', form, {
         headers: { 'Content-Type': 'multipart/form-data' },
-        timeout: 600_000,
+        timeout: 0,
       })
       .then(r => r.data);
   },
