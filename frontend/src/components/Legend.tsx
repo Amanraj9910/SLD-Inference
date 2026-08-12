@@ -8,7 +8,8 @@ export function Legend() {
   // Collect unique (classId, className) pairs across all visible results
   const items = useMemo(() => {
     const seen = new Map<number, string>();
-    for (const [modelId, modelDets] of Object.entries(detectionResults)) {
+    const detectionsObj = detectionResults.detections || {};
+    for (const [modelId, modelDets] of Object.entries(detectionsObj)) {
       if (!visibleModels[modelId]) continue;
       const threshold = thresholds[modelId] ?? 0;
       for (const det of modelDets.detections) {

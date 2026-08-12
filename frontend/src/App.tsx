@@ -7,6 +7,7 @@ import { UploadModelModal } from './components/UploadModelModal';
 import { LogsModal } from './components/LogsModal';
 import { JSONOutputModal } from './components/JSONOutputModal';
 import { Legend } from './components/Legend';
+import { ZoomControls } from './components/ZoomControls';
 import { downloadAnnotatedImage } from './utils/exportImage';
 import {
   Eye,
@@ -19,7 +20,11 @@ import {
   Terminal,
   Braces,
   Download,
+  Cpu,
+  Type,
+  Layers,
 } from 'lucide-react';
+import type { InferenceMode } from './store/appStore';
 
 export default function App() {
   const {
@@ -40,7 +45,11 @@ export default function App() {
     thresholds,
     visibleModels,
     inferSettings,
+    inferenceMode,
+    setInferenceMode,
   } = useAppStore();
+
+  const selectedModels = models.filter(m => selectedModelIds.has(m.model_id));
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [logsOpen, setLogsOpen] = useState(false);
@@ -74,7 +83,15 @@ export default function App() {
   const hasResults =
     Object.keys(detectionResults.detections || {}).length > 0 ||
     ((detectionResults.ocr || []).length > 0);
-  const canRunInfer = selectedModelIds.size > 0 && currentImageUrl !== null;
+  const canRunInfer =
+    currentImageUrl !== null &&
+    (inferenceMode === 'ocr' || selectedModelIds.size > 0);
+
+  const inferModes: { value: InferenceMode; label: string; icon: typeof Cpu }[] = [
+    { value: 'components', label: 'Components', icon: Cpu },
+    { value: 'ocr', label: 'OCR', icon: Type },
+    { value: 'both', label: 'Both', icon: Layers },
+  ];
 
   const handleDownload = async () => {
     if (!currentImageUrl || !currentImageFile || !hasResults) return;
@@ -131,18 +148,43 @@ export default function App() {
         </button>
 
         {/* OCR Toggle */}
-        <button
-          onClick={toggleShowOcr}
-          className={`flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg border transition-all ${
-            showOcr
-              ? 'border-emerald-600/40 bg-emerald-50 text-emerald-700'
-              : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900'
-          }`}
-          title={showOcr ? 'OCR text labels visible' : 'OCR text labels hidden'}
-        >
-          {showOcr ? <Eye size={14} /> : <EyeOff size={14} />}
-          <span>{showOcr ? 'OCR On' : 'OCR Off'}</span>
-        </button>
+        {inferenceMode !== 'components' && (
+          <button
+            onClick={toggleShowOcr}
+            className={`flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg border transition-all ${
+              showOcr
+                ? 'border-emerald-600/40 bg-emerald-50 text-emerald-700'
+                : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+            }`}
+            title={showOcr ? 'OCR text labels visible' : 'OCR text labels hidden'}
+          >
+            {showOcr ? <Eye size={14} /> : <EyeOff size={14} />}
+            <span>{showOcr ? 'OCR On' : 'OCR Off'}</span>
+          </button>
+        )}
+
+        {/* ── Inference Mode Selector ── */}
+        <div className="flex items-center rounded-lg border border-slate-200 bg-white shadow-sm overflow-hidden">
+          {inferModes.map(({ value, label, icon: Icon }) => (
+            <button
+              key={value}
+              onClick={() => setInferenceMode(value)}
+              className={`flex items-center gap-1 text-[10px] font-semibold px-2.5 py-1.5 transition-all border-r last:border-r-0 border-slate-200 ${
+                inferenceMode === value
+                  ? value === 'ocr'
+                    ? 'bg-emerald-50 text-emerald-700'
+                    : value === 'components'
+                    ? 'bg-indigo-50 text-indigo-700'
+                    : 'bg-violet-50 text-violet-700'
+                  : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700'
+              }`}
+              title={`Run ${label.toLowerCase()} only`}
+            >
+              <Icon size={12} />
+              <span>{label}</span>
+            </button>
+          ))}
+        </div>
 
         {/* Server logs button */}
         <button
@@ -217,7 +259,13 @@ export default function App() {
           ) : (
             <Play size={14} />
           )}
-          {isInferring ? 'Running…' : 'Run Inference'}
+          {isInferring
+            ? 'Running…'
+            : inferenceMode === 'ocr'
+            ? 'Run OCR'
+            : inferenceMode === 'components'
+            ? 'Run Detection'
+            : 'Run Inference'}
         </button>
       </header>
 
@@ -241,7 +289,45 @@ export default function App() {
             onDrop={handleDrop}
           >
             {currentImageUrl ? (
-              <ImageCanvas />
+              <div className="flex-1 relative flex flex-col min-h-0 w-full h-full">
+                {selectedModels.length > 1 ? (
+                  <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-4 p-4 h-full min-h-0 overflow-y-auto">
+                    {selectedModels.map(model => (
+                      <div key={model.model_id} className="flex flex-col h-full min-h-[400px] border border-slate-200 rounded-2xl overflow-hidden bg-white shadow-sm relative">
+                        {/* Header showing Model Name */}
+                        <div className="bg-slate-50/90 backdrop-blur px-4 py-2.5 border-b border-slate-200/80 flex items-center justify-between shrink-0 select-none">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <div className={`w-2 h-2 rounded-full shrink-0 ${model.loaded ? 'bg-emerald-500 animate-pulse' : 'bg-slate-300'}`} />
+                            <span className="text-xs font-bold text-slate-800 tracking-tight truncate" title={model.display_name}>
+                              {model.display_name}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                            <span className={`text-[9px] font-extrabold uppercase tracking-wider px-1.5 py-0.5 rounded-md border ${
+                              model.arch === 'dfine'
+                                ? 'bg-cyan-50 text-cyan-700 border-cyan-200'
+                                : 'bg-amber-50 text-amber-700 border-amber-200'
+                            }`}>
+                              {model.arch}
+                            </span>
+                            {model.loaded && (
+                              <span className="text-[9px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200/60 px-1.5 py-0.5 rounded-md">
+                                GPU
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex-1 min-h-0 relative flex">
+                          <ImageCanvas modelId={model.model_id} />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <ImageCanvas modelId={selectedModels[0]?.model_id} />
+                )}
+                <ZoomControls />
+              </div>
             ) : (
               <div className="text-center space-y-3 p-8">
                 <div className="w-14 h-14 mx-auto rounded-2xl bg-white border border-slate-200 flex items-center justify-center shadow-sm">

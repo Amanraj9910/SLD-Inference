@@ -69,7 +69,7 @@ class UploadModelManifest(BaseModel):
 
 class InferRequest(BaseModel):
     """JSON body attached to the multipart /api/infer request."""
-    model_ids: list[str] = Field(..., min_length=1)
+    model_ids: list[str] = Field(default_factory=list)
     use_tiling: bool = True
     tiling_mode: str | None = None       # None uses each model manifest
     grid_size: int | None = Field(None, ge=1, le=10)
@@ -78,6 +78,8 @@ class InferRequest(BaseModel):
     estimated_symbol_px: float | None = Field(None, gt=0.0)
     enable_auto_crop: bool | None = None
     enable_scale_norm: bool | None = None
+    inference_mode: str = "both"         # "components" | "ocr" | "both"
+    ocr_grid_size: int = Field(1, ge=1, le=6)
 
 
 
@@ -101,6 +103,7 @@ class OCRLine(BaseModel):
 
 
 class InferResponse(BaseModel):
-    """Consolidated inference response containing model detections and OCR text."""
+    """Consolidated inference response containing model detections, OCR text, and OCR tile boundaries."""
     detections: dict[str, ModelDetections]
     ocr: list[OCRLine] | None = None
+    ocr_tiles: list[list[float]] | None = None
