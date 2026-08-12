@@ -20,7 +20,11 @@ import {
   Terminal,
   Braces,
   Download,
+  Cpu,
+  Type,
+  Layers,
 } from 'lucide-react';
+import type { InferenceMode } from './store/appStore';
 
 export default function App() {
   const {
@@ -41,6 +45,8 @@ export default function App() {
     thresholds,
     visibleModels,
     inferSettings,
+    inferenceMode,
+    setInferenceMode,
   } = useAppStore();
 
   const selectedModels = models.filter(m => selectedModelIds.has(m.model_id));
@@ -77,7 +83,15 @@ export default function App() {
   const hasResults =
     Object.keys(detectionResults.detections || {}).length > 0 ||
     ((detectionResults.ocr || []).length > 0);
-  const canRunInfer = selectedModelIds.size > 0 && currentImageUrl !== null;
+  const canRunInfer =
+    currentImageUrl !== null &&
+    (inferenceMode === 'ocr' || selectedModelIds.size > 0);
+
+  const inferModes: { value: InferenceMode; label: string; icon: typeof Cpu }[] = [
+    { value: 'components', label: 'Components', icon: Cpu },
+    { value: 'ocr', label: 'OCR', icon: Type },
+    { value: 'both', label: 'Both', icon: Layers },
+  ];
 
   const handleDownload = async () => {
     if (!currentImageUrl || !currentImageFile || !hasResults) return;
@@ -134,18 +148,43 @@ export default function App() {
         </button>
 
         {/* OCR Toggle */}
-        <button
-          onClick={toggleShowOcr}
-          className={`flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg border transition-all ${
-            showOcr
-              ? 'border-emerald-600/40 bg-emerald-50 text-emerald-700'
-              : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900'
-          }`}
-          title={showOcr ? 'OCR text labels visible' : 'OCR text labels hidden'}
-        >
-          {showOcr ? <Eye size={14} /> : <EyeOff size={14} />}
-          <span>{showOcr ? 'OCR On' : 'OCR Off'}</span>
-        </button>
+        {inferenceMode !== 'components' && (
+          <button
+            onClick={toggleShowOcr}
+            className={`flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg border transition-all ${
+              showOcr
+                ? 'border-emerald-600/40 bg-emerald-50 text-emerald-700'
+                : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+            }`}
+            title={showOcr ? 'OCR text labels visible' : 'OCR text labels hidden'}
+          >
+            {showOcr ? <Eye size={14} /> : <EyeOff size={14} />}
+            <span>{showOcr ? 'OCR On' : 'OCR Off'}</span>
+          </button>
+        )}
+
+        {/* ── Inference Mode Selector ── */}
+        <div className="flex items-center rounded-lg border border-slate-200 bg-white shadow-sm overflow-hidden">
+          {inferModes.map(({ value, label, icon: Icon }) => (
+            <button
+              key={value}
+              onClick={() => setInferenceMode(value)}
+              className={`flex items-center gap-1 text-[10px] font-semibold px-2.5 py-1.5 transition-all border-r last:border-r-0 border-slate-200 ${
+                inferenceMode === value
+                  ? value === 'ocr'
+                    ? 'bg-emerald-50 text-emerald-700'
+                    : value === 'components'
+                    ? 'bg-indigo-50 text-indigo-700'
+                    : 'bg-violet-50 text-violet-700'
+                  : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700'
+              }`}
+              title={`Run ${label.toLowerCase()} only`}
+            >
+              <Icon size={12} />
+              <span>{label}</span>
+            </button>
+          ))}
+        </div>
 
         {/* Server logs button */}
         <button
@@ -220,7 +259,13 @@ export default function App() {
           ) : (
             <Play size={14} />
           )}
-          {isInferring ? 'Running…' : 'Run Inference'}
+          {isInferring
+            ? 'Running…'
+            : inferenceMode === 'ocr'
+            ? 'Run OCR'
+            : inferenceMode === 'components'
+            ? 'Run Detection'
+            : 'Run Inference'}
         </button>
       </header>
 

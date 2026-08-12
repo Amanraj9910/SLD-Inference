@@ -43,6 +43,7 @@ export interface OCRLine {
 export interface InferResponse {
   detections: Record<string, ModelDetections>;
   ocr: OCRLine[] | null;
+  ocr_tiles?: [number, number, number, number][] | null;
 }
 
 export interface ModelGroup {
@@ -76,6 +77,8 @@ function saveModelGroups(groups: ModelGroup[]): void {
 }
 
 // ─── Inference settings ────────────────────────────────────────────────────
+
+export type InferenceMode = 'components' | 'ocr' | 'both';
 
 export interface InferSettings {
   tilingMode: 'fixed' | 'adaptive';
@@ -128,10 +131,22 @@ interface AppState {
   toggleShowLabels: () => void;
   showOcr: boolean;
   toggleShowOcr: () => void;
+  showComponentTileGrid: boolean;
+  toggleShowComponentTileGrid: () => void;
+  showOcrTileGrid: boolean;
+  toggleShowOcrTileGrid: () => void;
+
+  // Inference mode
+  inferenceMode: InferenceMode;
+  setInferenceMode: (mode: InferenceMode) => void;
 
   // Inference settings
   inferSettings: InferSettings;
   setInferSettings: (patch: Partial<InferSettings>) => void;
+
+  // OCR tiling
+  ocrTilingGrid: number;
+  setOcrTilingGrid: (grid: number) => void;
 
   // Image + detections
   currentImageUrl: string | null;              // object URL for canvas
@@ -300,6 +315,14 @@ export const useAppStore = create<AppState>((set, get) => ({
   toggleShowLabels: () => set(s => ({ showLabels: !s.showLabels })),
   showOcr: true,
   toggleShowOcr: () => set(s => ({ showOcr: !s.showOcr })),
+  showComponentTileGrid: true,
+  toggleShowComponentTileGrid: () => set(s => ({ showComponentTileGrid: !s.showComponentTileGrid })),
+  showOcrTileGrid: true,
+  toggleShowOcrTileGrid: () => set(s => ({ showOcrTileGrid: !s.showOcrTileGrid })),
+
+  // ── Inference mode ──────────────────────────────────────────────────────
+  inferenceMode: 'both',
+  setInferenceMode: (mode) => set({ inferenceMode: mode }),
 
   // ── Inference settings ───────────────────────────────────────────────────
   inferSettings: {
@@ -313,6 +336,10 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
   setInferSettings: patch =>
     set(s => ({ inferSettings: { ...s.inferSettings, ...patch } })),
+
+  // ── OCR tiling ─────────────────────────────────────────────────────────
+  ocrTilingGrid: 1,
+  setOcrTilingGrid: (grid) => set({ ocrTilingGrid: grid }),
 
   // ── Image ────────────────────────────────────────────────────────────────
   currentImageUrl: null,
@@ -353,14 +380,17 @@ export const useAppStore = create<AppState>((set, get) => ({
   inferError: null,
 
   runInfer: async () => {
-    const { currentImageFile, selectedModelIds, inferSettings } = get();
-    if (!currentImageFile || selectedModelIds.size === 0) return;
+    const { currentImageFile, selectedModelIds, inferSettings, inferenceMode, ocrTilingGrid } = get();
+    if (!currentImageFile) return;
+    // For 'components' and 'both' modes, we need at least one model selected
+    // For 'ocr' mode, models are not required
+    if (inferenceMode !== 'ocr' && selectedModelIds.size === 0) return;
 
     set({ isInferring: true, inferError: null });
     try {
       const results = await api.infer({
         image: currentImageFile,
-        modelIds: [...selectedModelIds],
+        modelIds: inferenceMode === 'ocr' ? [] : [...selectedModelIds],
         useTiling: true,
         tilingMode: inferSettings.tilingMode,
         gridSize: inferSettings.gridSize,
@@ -369,6 +399,8 @@ export const useAppStore = create<AppState>((set, get) => ({
         estimatedSymbolPx: inferSettings.estimatedSymbolPx,
         enableAutoCrop: inferSettings.enableAutoCrop,
         enableScaleNorm: inferSettings.enableScaleNorm,
+        inferenceMode,
+        ocrGridSize: ocrTilingGrid,
       });
       set({ detectionResults: results });
     } catch (err: unknown) {

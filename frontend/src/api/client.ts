@@ -53,6 +53,8 @@ export const api = {
     estimatedSymbolPx?: number;
     enableAutoCrop?: boolean;
     enableScaleNorm?: boolean;
+    inferenceMode?: 'components' | 'ocr' | 'both';
+    ocrGridSize?: number;
   }): Promise<InferResponse> {
     const form = new FormData();
     form.append('image', params.image);
@@ -68,6 +70,8 @@ export const api = {
         ...(params.estimatedSymbolPx !== undefined && { estimated_symbol_px: params.estimatedSymbolPx }),
         ...(params.enableAutoCrop !== undefined && { enable_auto_crop: params.enableAutoCrop }),
         ...(params.enableScaleNorm !== undefined && { enable_scale_norm: params.enableScaleNorm }),
+        inference_mode: params.inferenceMode ?? 'both',
+        ocr_grid_size: params.ocrGridSize ?? 1,
       })
     );
     return http

@@ -4,6 +4,7 @@ import type Konva from 'konva';
 import { Stage, Layer, Image as KonvaImage, Rect, Text, Group } from 'react-konva';
 import { useAppStore } from '../store/appStore';
 import { classColor } from '../utils/palette';
+import { computeTileBoxes } from '../utils/tiling';
 import type { Detection } from '../store/appStore';
 
 interface CanvasSize { w: number; h: number; }
@@ -37,6 +38,11 @@ export function ImageCanvas({ modelId }: { modelId?: string }) {
     stagePos,
     setStagePos,
     resetZoom,
+    inferenceMode,
+    ocrTilingGrid,
+    inferSettings,
+    showComponentTileGrid,
+    showOcrTileGrid,
   } = useAppStore();
 
   // ── Resize observer ──────────────────────────────────────────────────────
@@ -143,6 +149,22 @@ export function ImageCanvas({ modelId }: { modelId?: string }) {
       });
     });
   }
+
+  // Live client-side tile grid calculations (instant feedback before inference)
+  const showOcrTilingSection =
+    showOcrTileGrid && (inferenceMode === 'ocr' || inferenceMode === 'both') && ocrTilingGrid > 1;
+  const liveOcrTiles = showOcrTilingSection
+    ? computeTileBoxes(imageNaturalSize.w, imageNaturalSize.h, ocrTilingGrid, 0.40)
+    : [];
+
+  const showComponentTilingSection =
+    showComponentTileGrid &&
+    (inferenceMode === 'components' || inferenceMode === 'both') &&
+    inferSettings.tilingMode === 'fixed' &&
+    inferSettings.gridSize > 1;
+  const liveComponentTiles = showComponentTilingSection
+    ? computeTileBoxes(imageNaturalSize.w, imageNaturalSize.h, inferSettings.gridSize, inferSettings.overlap)
+    : [];
 
   const handleBoxEnter = useCallback(
     (key: string, det: Detection, className: string, color: string, e: KonvaEventObject<MouseEvent>) => {
@@ -251,6 +273,93 @@ export function ImageCanvas({ modelId }: { modelId?: string }) {
                     listening={false}
                   />
                 )}
+              </Group>
+            );
+          })}
+
+          {/* Live Component Tile Borders (instant client-side feedback) */}
+          {liveComponentTiles.map(({ x1, y1, x2, y2 }, idx) => {
+            const rx = x1 * scaleX;
+            const ry = y1 * scaleY;
+            const rw = (x2 - x1) * scaleX;
+            const rh = (y2 - y1) * scaleY;
+            const hue = (idx * 137.5 + 200) % 360;
+            const strokeColor = `hsl(${hue}, 85%, 45%)`;
+            const fillColor = `hsla(${hue}, 85%, 50%, 0.04)`;
+
+            return (
+              <Group key={`comp-tile-${idx}`} listening={false}>
+                <Rect
+                  x={rx}
+                  y={ry}
+                  width={rw}
+                  height={rh}
+                  stroke={strokeColor}
+                  strokeWidth={2 / zoomScale}
+                  dash={[6 / zoomScale, 3 / zoomScale]}
+                  fill={fillColor}
+                />
+                <Rect
+                  x={rx + 4 / zoomScale}
+                  y={ry + 4 / zoomScale}
+                  width={72 / zoomScale}
+                  height={16 / zoomScale}
+                  fill={`hsl(${hue}, 70%, 25%)`}
+                  cornerRadius={3 / zoomScale}
+                />
+                <Text
+                  x={rx + 7 / zoomScale}
+                  y={ry + 6 / zoomScale}
+                  text={`Comp Tile ${idx + 1}`}
+                  fontSize={9 / zoomScale}
+                  fontFamily="Inter, sans-serif"
+                  fontStyle="bold"
+                  fill="#ffffff"
+                />
+              </Group>
+            );
+          })}
+
+          {/* Live OCR Tile Borders (instant client-side feedback) */}
+          {liveOcrTiles.map(({ x1, y1, x2, y2 }, idx) => {
+            const rx = x1 * scaleX;
+            const ry = y1 * scaleY;
+            const rw = (x2 - x1) * scaleX;
+            const rh = (y2 - y1) * scaleY;
+            const hue = (idx * 137.5) % 360;
+            const strokeColor = `hsl(${hue}, 85%, 45%)`;
+            const fillColor = `hsla(${hue}, 85%, 50%, 0.05)`;
+            const labelBg = `hsl(${hue}, 80%, 25%)`;
+
+            return (
+              <Group key={`ocr-tile-${idx}`} listening={false}>
+                <Rect
+                  x={rx}
+                  y={ry}
+                  width={rw}
+                  height={rh}
+                  stroke={strokeColor}
+                  strokeWidth={2 / zoomScale}
+                  dash={[8 / zoomScale, 4 / zoomScale]}
+                  fill={fillColor}
+                />
+                <Rect
+                  x={rx + 4 / zoomScale}
+                  y={ry + 4 / zoomScale}
+                  width={62 / zoomScale}
+                  height={16 / zoomScale}
+                  fill={labelBg}
+                  cornerRadius={3 / zoomScale}
+                />
+                <Text
+                  x={rx + 7 / zoomScale}
+                  y={ry + 6 / zoomScale}
+                  text={`OCR Tile ${idx + 1}`}
+                  fontSize={9 / zoomScale}
+                  fontFamily="Inter, sans-serif"
+                  fontStyle="bold"
+                  fill="#ffffff"
+                />
               </Group>
             );
           })}
