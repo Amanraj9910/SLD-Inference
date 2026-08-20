@@ -22,7 +22,7 @@ import torchvision.transforms as T
 from PIL import Image
 
 from app.config import settings
-from app.models.base import BaseModelWrapper
+from app.component.models.base import BaseModelWrapper
 
 logger = logging.getLogger(__name__)
 

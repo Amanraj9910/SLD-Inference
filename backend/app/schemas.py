@@ -28,6 +28,7 @@ class ModelInfo(BaseModel):
     estimated_symbol_px: float = 48.0
     enable_auto_crop: bool = False
     enable_scale_norm: bool = False
+    target_reference_height: float = 60.0
     iou_threshold: float = 0.50
     loaded: bool = False                # True once the GPU model is in memory
     weights_exist: bool = True          # True if the .pth file actually exists on disk
@@ -94,6 +95,7 @@ class ModelDetections(BaseModel):
     """All detections from one model for the submitted image."""
     class_names: list[str]
     detections: list[Detection]
+    panels: list[dict] | None = None
 
 
 class OCRLine(BaseModel):
@@ -107,3 +109,4 @@ class InferResponse(BaseModel):
     detections: dict[str, ModelDetections]
     ocr: list[OCRLine] | None = None
     ocr_tiles: list[list[float]] | None = None
+    component_tiles: list[list[float]] | None = None

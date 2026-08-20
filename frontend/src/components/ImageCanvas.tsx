@@ -4,7 +4,7 @@ import type Konva from 'konva';
 import { Stage, Layer, Image as KonvaImage, Rect, Text, Group } from 'react-konva';
 import { useAppStore } from '../store/appStore';
 import { classColor } from '../utils/palette';
-import { computeTileBoxes } from '../utils/tiling';
+import { computeTileBoxes, computeAdaptiveTileBoxes } from '../utils/tiling';
 import type { Detection } from '../store/appStore';
 
 interface CanvasSize { w: number; h: number; }
@@ -150,6 +150,36 @@ export function ImageCanvas({ modelId }: { modelId?: string }) {
     });
   }
 
+  const visiblePanels: Array<{
+    key: string;
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    border_type: string;
+    continuation?: string | null;
+    busbar?: { x: number; y: number; width: number; height: number; score: number } | null;
+  }> = [];
+
+  const visibleModelIds = Object.keys(detectionsObj).filter(mId => visibleModels[mId]);
+  if (visibleModelIds.length > 0) {
+    const primaryModelId = visibleModelIds[0];
+    const modelDets = detectionsObj[primaryModelId];
+    const panels = modelDets?.panels || [];
+    panels.forEach((panel: any, idx: number) => {
+      visiblePanels.push({
+        key: `panel-${idx}`,
+        x: panel.x,
+        y: panel.y,
+        width: panel.width,
+        height: panel.height,
+        border_type: panel.border_type,
+        continuation: panel.continuation,
+        busbar: panel.busbar,
+      });
+    });
+  }
+
   // Live client-side tile grid calculations (instant feedback before inference)
   const showOcrTilingSection =
     showOcrTileGrid && (inferenceMode === 'ocr' || inferenceMode === 'both') && ocrTilingGrid > 1;
@@ -159,12 +189,48 @@ export function ImageCanvas({ modelId }: { modelId?: string }) {
 
   const showComponentTilingSection =
     showComponentTileGrid &&
-    (inferenceMode === 'components' || inferenceMode === 'both') &&
-    inferSettings.tilingMode === 'fixed' &&
-    inferSettings.gridSize > 1;
-  const liveComponentTiles = showComponentTilingSection
-    ? computeTileBoxes(imageNaturalSize.w, imageNaturalSize.h, inferSettings.gridSize, inferSettings.overlap)
-    : [];
+    (inferenceMode === 'components' || inferenceMode === 'both');
+
+  let componentTilesToDraw: Array<{ x1: number; y1: number; x2: number; y2: number }> = [];
+
+  if (showComponentTilingSection) {
+    if (inferSettings.tilingMode === 'fixed') {
+      if (inferSettings.gridSize > 1) {
+        componentTilesToDraw = computeTileBoxes(
+          imageNaturalSize.w,
+          imageNaturalSize.h,
+          inferSettings.gridSize,
+          inferSettings.overlap
+        );
+      }
+    } else {
+      // Adaptive Tiling
+      if (detectionResults.component_tiles && detectionResults.component_tiles.length > 0) {
+        componentTilesToDraw = detectionResults.component_tiles.map(box => ({
+          x1: box[0],
+          y1: box[1],
+          x2: box[2],
+          y2: box[3],
+        }));
+      } else {
+        const activeModelId = modelId || Array.from(useAppStore.getState().selectedModelIds)[0];
+        const activeModel = models.find(m => m.model_id === activeModelId);
+        const resolution = activeModel?.resolution || 640;
+        const refHeight = activeModel?.target_reference_height || 60.0;
+        const res = computeAdaptiveTileBoxes(
+          imageNaturalSize.w,
+          imageNaturalSize.h,
+          inferSettings.targetSymbolPx,
+          inferSettings.estimatedSymbolPx,
+          resolution,
+          inferSettings.overlap,
+          inferSettings.enableScaleNorm,
+          refHeight
+        );
+        componentTilesToDraw = res.boxes;
+      }
+    }
+  }
 
   const handleBoxEnter = useCallback(
     (key: string, det: Detection, className: string, color: string, e: KonvaEventObject<MouseEvent>) => {
@@ -278,7 +344,7 @@ export function ImageCanvas({ modelId }: { modelId?: string }) {
           })}
 
           {/* Live Component Tile Borders (instant client-side feedback) */}
-          {liveComponentTiles.map(({ x1, y1, x2, y2 }, idx) => {
+          {componentTilesToDraw.map(({ x1, y1, x2, y2 }, idx) => {
             const rx = x1 * scaleX;
             const ry = y1 * scaleY;
             const rw = (x2 - x1) * scaleX;
@@ -427,6 +493,133 @@ export function ImageCanvas({ modelId }: { modelId?: string }) {
                     listening={false}
                   />
                 )}
+              </Group>
+            );
+          })}
+
+          {/* Deterministic Panel and Busbar boxes */}
+          {visiblePanels.map((panel, idx) => {
+            const rx = panel.x * scaleX;
+            const ry = panel.y * scaleY;
+            const rw = panel.width * scaleX;
+            const rh = panel.height * scaleY;
+            const isHovered = hoveredKey === panel.key;
+            const strokeWidth = (isHovered ? 3.5 : 2) / zoomScale;
+            const panelColor = '#2563eb'; // Royal Blue
+            const busbarColor = '#10b981'; // Emerald Green
+
+            let label = `P${idx + 1}`;
+            if (panel.continuation === 'left') label += '[L]';
+            else if (panel.continuation === 'right') label += '[R]';
+            else if (panel.continuation === 'both') label += '[L+R]';
+
+            return (
+              <Group key={panel.key}>
+                {/* Panel rectangle */}
+                <Rect
+                  x={rx}
+                  y={ry}
+                  width={rw}
+                  height={rh}
+                  stroke={panelColor}
+                  strokeWidth={strokeWidth}
+                  dash={panel.border_type === 'dashed' || panel.border_type === 'dashed_with_continuation' ? [6 / zoomScale, 3 / zoomScale] : undefined}
+                  fill={isHovered ? 'rgba(37,99,235,0.08)' : 'transparent'}
+                  onMouseEnter={e => {
+                    setHoveredKey(panel.key);
+                    const stage = e.target.getStage();
+                    if (!stage) return;
+                    const pos = stage.getPointerPosition();
+                    if (!pos) return;
+                    setTooltip({
+                      x: (pos.x - stage.x()) / zoomScale + 12 / zoomScale,
+                      y: (pos.y - stage.y()) / zoomScale - 8 / zoomScale,
+                      label: `${label} (${panel.border_type})`,
+                      color: panelColor,
+                    });
+                  }}
+                  onMouseLeave={handleBoxLeave}
+                  onMouseMove={e => {
+                    const stage = e.target.getStage();
+                    if (!stage) return;
+                    const pos = stage.getPointerPosition();
+                    if (pos) {
+                      setTooltip(t => t ? {
+                        ...t,
+                        x: (pos.x - stage.x()) / zoomScale + 12 / zoomScale,
+                        y: (pos.y - stage.y()) / zoomScale - 8 / zoomScale
+                      } : t);
+                    }
+                  }}
+                />
+                {(showLabels || isHovered) && (
+                  <Text
+                    x={rx + 4 / zoomScale}
+                    y={ry + 4 / zoomScale}
+                    text={label}
+                    fontSize={11 / zoomScale}
+                    fontFamily="Inter, sans-serif"
+                    fontStyle="bold"
+                    fill={panelColor}
+                    shadowColor="black"
+                    shadowBlur={2 / zoomScale}
+                    shadowOpacity={0.8}
+                    listening={false}
+                  />
+                )}
+
+                {/* Busbar rectangle if present */}
+                {(() => {
+                  const busbar = panel.busbar;
+                  if (!busbar) return null;
+                  const bx = busbar.x * scaleX;
+                  const by = busbar.y * scaleY;
+                  const bw = busbar.width * scaleX;
+                  const bh = busbar.height * scaleY;
+                  const busbarKey = `${panel.key}-busbar`;
+                  const isBusbarHovered = hoveredKey === busbarKey;
+                  const bStrokeWidth = (isBusbarHovered ? 4 : 2.5) / zoomScale;
+
+                  return (
+                    <Group key={busbarKey}>
+                      <Rect
+                        x={bx}
+                        y={by}
+                        width={bw}
+                        height={bh}
+                        stroke={busbarColor}
+                        strokeWidth={bStrokeWidth}
+                        fill={isBusbarHovered ? 'rgba(16,185,129,0.2)' : 'transparent'}
+                        onMouseEnter={e => {
+                          setHoveredKey(busbarKey);
+                          const stage = e.target.getStage();
+                          if (!stage) return;
+                          const pos = stage.getPointerPosition();
+                          if (!pos) return;
+                          setTooltip({
+                            x: (pos.x - stage.x()) / zoomScale + 12 / zoomScale,
+                            y: (pos.y - stage.y()) / zoomScale - 8 / zoomScale,
+                            label: `Busbar (Len: ${busbar.width})`,
+                            color: busbarColor,
+                          });
+                        }}
+                        onMouseLeave={handleBoxLeave}
+                        onMouseMove={e => {
+                          const stage = e.target.getStage();
+                          if (!stage) return;
+                          const pos = stage.getPointerPosition();
+                          if (pos) {
+                            setTooltip(t => t ? {
+                              ...t,
+                              x: (pos.x - stage.x()) / zoomScale + 12 / zoomScale,
+                              y: (pos.y - stage.y()) / zoomScale - 8 / zoomScale
+                            } : t);
+                          }
+                        }}
+                      />
+                    </Group>
+                  );
+                })()}
               </Group>
             );
           })}

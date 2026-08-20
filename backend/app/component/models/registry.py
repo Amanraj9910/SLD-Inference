@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Iterator
 
 from app.config import settings
-from app.models.base import BaseModelWrapper
+from app.component.models.base import BaseModelWrapper
 from app.schemas import ModelInfo
 
 logger = logging.getLogger(__name__)
@@ -79,10 +79,10 @@ def _build_wrapper(model_id: str, manifest: dict) -> BaseModelWrapper:
     weights_subdir = manifest["_weights_subdir"]
 
     if arch == "dfine":
-        from app.models.dfine_wrapper import DFINEWrapper
+        from app.component.models.dfine_wrapper import DFINEWrapper
         return DFINEWrapper(manifest, weights_subdir)
     elif arch == "rfdetr":
-        from app.models.rfdetr_wrapper import RFDETRWrapper
+        from app.component.models.rfdetr_wrapper import RFDETRWrapper
         return RFDETRWrapper(manifest, weights_subdir)
     else:
         raise ValueError(f"Unknown arch '{arch}' for model '{model_id}'")
@@ -156,6 +156,7 @@ def scan() -> list[ModelInfo]:
                 estimated_symbol_px=float(manifest.get("estimated_symbol_px", 48.0)),
                 enable_auto_crop=bool(manifest.get("enable_auto_crop", False)),
                 enable_scale_norm=bool(manifest.get("enable_scale_norm", False)),
+                target_reference_height=float(manifest.get("target_reference_height", 60.0)),
                 iou_threshold=manifest.get("iou_threshold", 0.50),
                 loaded=model_id in _registry,
                 weights_exist=weights_exist,
@@ -286,6 +287,7 @@ def update_manifest(
         estimated_symbol_px=float(manifest.get("estimated_symbol_px", 48.0)),
         enable_auto_crop=bool(manifest.get("enable_auto_crop", False)),
         enable_scale_norm=bool(manifest.get("enable_scale_norm", False)),
+        target_reference_height=float(manifest.get("target_reference_height", 60.0)),
         iou_threshold=manifest.get("iou_threshold", 0.50),
         loaded=model_id in _registry,
         weights_exist=weights_exist,

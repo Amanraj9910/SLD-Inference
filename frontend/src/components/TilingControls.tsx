@@ -1,5 +1,6 @@
 import { useAppStore } from '../store/appStore';
 import { Eye, EyeOff } from 'lucide-react';
+import { computeAdaptiveTileBoxes } from '../utils/tiling';
 
 export function TilingControls() {
   const {
@@ -12,7 +13,32 @@ export function TilingControls() {
     toggleShowComponentTileGrid,
     showOcrTileGrid,
     toggleShowOcrTileGrid,
+    models,
+    selectedModelIds,
+    imageDimensions,
   } = useAppStore();
+
+  const selectedModelId = Array.from(selectedModelIds)[0];
+  const selectedModel = models.find(m => m.model_id === selectedModelId);
+  const modelInputSize = selectedModel?.resolution || 640;
+  const targetReferenceHeight = selectedModel?.target_reference_height || 60.0;
+
+  let adaptiveGridStr = '';
+  if (imageDimensions) {
+    const { gx, gy, boxes } = computeAdaptiveTileBoxes(
+      imageDimensions.width,
+      imageDimensions.height,
+      inferSettings.targetSymbolPx,
+      inferSettings.estimatedSymbolPx,
+      modelInputSize,
+      inferSettings.overlap,
+      inferSettings.enableScaleNorm,
+      targetReferenceHeight
+    );
+    adaptiveGridStr = `${gx} × ${gy} (${boxes.length} tile${boxes.length !== 1 ? 's' : ''})`;
+  } else {
+    adaptiveGridStr = 'Upload image to calculate';
+  }
 
   const adaptive = inferSettings.tilingMode === 'adaptive';
   const showComponentTiling = inferenceMode === 'components' || inferenceMode === 'both';
@@ -25,7 +51,7 @@ export function TilingControls() {
         <div className="space-y-2">
           <div className="flex items-center justify-between px-0.5">
             <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Component Tiling</p>
-            {!adaptive && inferSettings.gridSize > 1 && (
+            {(adaptive || inferSettings.gridSize > 1) && (
               <button
                 type="button"
                 onClick={toggleShowComponentTileGrid}
@@ -60,9 +86,17 @@ export function TilingControls() {
           </button>
 
           {adaptive ? (
-            <p className="text-[10px] leading-relaxed text-slate-500">
-              Tile count is calculated from the uploaded image and symbol scale.
-            </p>
+            <div className="space-y-1">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-medium text-slate-500">Calculated grid</span>
+                <span className="text-[11px] text-indigo-700 tabular-nums font-semibold">
+                  {adaptiveGridStr}
+                </span>
+              </div>
+              <p className="text-[10px] leading-relaxed text-slate-500">
+                Tile count is calculated from the uploaded image and symbol scale.
+              </p>
+            </div>
           ) : (
             <div className="space-y-1">
               <div className="flex items-center justify-between">
