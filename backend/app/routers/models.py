@@ -12,7 +12,7 @@ from pathlib import Path
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 
 from app.config import settings
-from app.models import registry
+from app.component.models import registry
 from app.schemas import ModelInfo, UpdateConfigRequest, UploadModelManifest
 
 logger = logging.getLogger(__name__)

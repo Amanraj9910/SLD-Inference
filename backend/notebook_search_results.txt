@@ -1,0 +1,48 @@
+Cell 3:
+# ══════════════════════════════════════════════════════
+# STEP 2 — Config
+# ══════════════════════════════════════════════════════
+import os
+
+DFINE_WEIGHTS_PATH  = next((p for p in ['/content/best_stg2.pth', '/content/best_stg1.pth'] if os.path.exists(p)), '/content/best_stg1.pth')
+RFDETR_WEIGHTS_PATH = '/content/checkpoint_best_regular.pth'
+
+DFINE_NUM_CLASSES = 30
+RFDETR_NUM_CLASSES = 10
+----------------------------------------
+Cell 5:
+# ══════════════════════════════════════════════════════
+# STEP 4 — Helpers (D-FINE version — no background class to skip)
+# ══════════════════════════════════════════════════════
+from PIL import Image
+import numpy as np
+import supervision as sv
+import torchvision.transforms as T
+
+# Matches training pipeline exactly: plain resize to (RESOLUTION, RESOLUTION)
+# (NOT aspect-ratio-preserving — D-FINE's own Resize op squeezes the image),
+----------------------------------------
+Cell 9:
+# ══════════════════════════════════════════════════════
+# STEP 6 — MODE 1: Tiled 5x5 — D-FINE + RF-DETR
+# ══════════════════════════════════════════════════════
+GRID_SIZE_5 = 5
+W, H = test_image.size
+tiles5 = tile_image(test_image, grid_size=GRID_SIZE_5, overlap=OVERLAP)
+print(f'Total tiles: {len(tiles5)} ({GRID_SIZE_5}x{GRID_SIZE_5}, {int(OVERLAP*100)}% overlap)\n')
+
+# ── D-FINE 5x5 ───────────────────────────────────────
+print('--- D-FINE 5x5 ---')
+----------------------------------------
+Cell 10:
+# ══════════════════════════════════════════════════════
+# STEP 7 — MODE 2: Tiled 4x4 — D-FINE + RF-DETR
+# ══════════════════════════════════════════════════════
+W, H = test_image.size
+tiles4 = tile_image(test_image, grid_size=GRID_SIZE, overlap=OVERLAP)
+print(f'Total tiles: {len(tiles4)} ({GRID_SIZE}x{GRID_SIZE}, {int(OVERLAP*100)}% overlap)\n')
+
+# ── D-FINE 4x4 ───────────────────────────────────────
+print('--- D-FINE 4x4 ---')
+tile_results_dfine4 = []
+----------------------------------------

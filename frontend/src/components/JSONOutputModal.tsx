@@ -77,6 +77,7 @@ export function JSONOutputModal({ isOpen, onClose }: JSONOutputModalProps) {
           confidence: number;
           box: { x_min: number; y_min: number; x_max: number; y_max: number };
         }>;
+        panels: any[];
       }
     > = {};
 
@@ -110,12 +111,14 @@ export function JSONOutputModal({ isOpen, onClose }: JSONOutputModalProps) {
       const filteredDets = q
         ? allDets.filter(det => det.class_name.toLowerCase().includes(q))
         : allDets;
+      const rawPanels = Array.isArray(mData?.panels) ? mData.panels : [];
 
       map[mId] = {
         model_id: mId,
         display_name: modelNameMap[mId] || mId,
         total_detections: filteredDets.length,
         detections: filteredDets,
+        panels: rawPanels,
       };
     });
 
@@ -176,6 +179,18 @@ export function JSONOutputModal({ isOpen, onClose }: JSONOutputModalProps) {
     URL.revokeObjectURL(url);
   };
 
+  const handleDownloadPanels = () => {
+    const modelData = modelFormattedMap[validTab];
+    const panels = modelData?.panels || [];
+    const blob = new Blob([JSON.stringify(panels, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'panel.json';
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -202,6 +217,16 @@ export function JSONOutputModal({ isOpen, onClose }: JSONOutputModalProps) {
           </div>
 
           <div className="flex items-center gap-2.5">
+            {validTab !== 'ocr' && validTab !== 'all' && (
+              <button
+                onClick={handleDownloadPanels}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white border border-emerald-700 transition-all shadow-sm"
+                title="Download panel.json for this model"
+              >
+                <Download size={13} />
+                <span>Download panel.json</span>
+              </button>
+            )}
             <button
               onClick={handleDownload}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-all shadow-sm"

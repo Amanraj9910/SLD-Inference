@@ -1,0 +1,91 @@
+--- Cell 8 ---
+# ══════════════════════════════════════════════════════
+# STEP 7 — MODE 2: Tiled 4x4 — D-FINE
+# ══════════════════════════════════════════════════════
+W, H = test_image.size
+tiles4 = tile_image(test_image, grid_size=GRID_SIZE, overlap=OVERLAP)
+print(f'Total tiles: {len(tiles4)} ({GRID_SIZE}x{GRID_SIZE}, {int(OVERLAP*100)}% overlap)\n')
+
+print('--- D-FINE 4x4 ---')
+tile_results_dfine4 = []
+for i, (tile, x_off, y_off) in enumerate(tiles4):
+    det = run_inference_dfine(tile)
+    tile_results_dfine4.append((det, x_off, y_off))
+    print(f'  Tile {i+1:02d}/{len(tiles4)} at ({x_off},{y_off}) => {len(det)} detections')
+det_dfine_4x4 = merge_detections(tile_results_dfine4, W, H)
+print(f'After NMS: {len(det_dfine_4x4)} detections')
+for i,(box,score,cls) in enumerate(zip(det_dfine_4x4.xyxy, det_dfine_4x4.confidence, det_dfine_4x4.class_id)):
+    name = CLASS_NAMES[int(cls)] if int(cls) < len(CLASS_NAMES) else f'class_{cls}'
+    print(f'  [{i+1}] {name}  conf={score:.3f}  box=[{int(box[0])},{int(box[1])},{int(box[2])},{int(box[3])}]')
+
+result_dfine_4x4 = draw_detections(test_image, det_dfine_4x4)
+out = result_dfine_4x4.copy(); out.thumbnail((1200,1200))
+print('\nD-FINE 4x4 result:'); display(out)
+
+def estimate_median_symbol_px(image_width):
+    return REFERENCE_MEDIAN_SYMBOL_PX * image_width / REFERENCE_SHEET_WIDTH
+
+def detect_white_margins(image_array, threshold=240, blank_fraction=0.985):
+    white = np.all(image_array > threshold, axis=2)
+    top = next((row for row in range(image_array.shape[0]) if white[row].mean() < blank_fraction), 0)
+    bottom = next((row for row in range(image_array.shape[0] - 1, -1, -1) if white[row].mean() < blank_fraction), image_array.shape[0] - 1)
+    left = next((col for col in range(image_array.shape[1]) if white[:, col].mean() < blank_fraction), 0)
+    right = next((col for col in range(image_array.shape[1] - 1, -1, -1) if white[:, col].mean() < blank_fraction), image_array.shape[1] - 1)
+    return left, top, right + 1, bottom + 1
+
+def run_adaptive_tiled_inference(full_image):
+    original_width, original_height = full_image.size
+    scale = TARGET_REFERENCE_HEIGHT / MEDIAN_SYMBOL_PX if MEDIAN_SYMBOL_PX > 0 else 1.0
+    scaled = full_image.resize((round(original_width * scale), round(original_height * scale)), Image.Resampling.BILINEAR)
+    left, top, right, bottom = detect_white_margins(np.array(scaled))
+    left, top = max(0, left - 5), max(0, top - 5)
+    right, bottom = min(scaled.width, right + 5), min(scaled.height, bottom + 5)
+    cropped = scaled.crop((left, top, right, bottom))
+    effective_median = MEDIAN_SYMBOL_PX * scale
+    grid_x = max(1, round(48 * cropped.width / (RESOLUTION * effective_median)))
+    grid_y = max(1, round(48 * cropped.height / (RESOLUTION * effective_median)))
+    overlap = OVERLAP
+    tile_width = cropped.width / (grid_x - (grid_x - 1) * overlap) if grid_x > 1 else cropped.width
+    tile_height = cropped.height / (grid_y - (grid_y - 1) * overlap) if grid_y > 1 else cropped.height
+    positions_x = [i * tile_width * (1 - overlap) for i in range(grid_x)]
+    positions_y = [i * tile_height * (1 - overlap) for i in range(grid_y)]
+    if grid_x > 1: positions_x[-1] = cropped.width - tile_width
+    if grid_y > 1: positions_y[-1] = cropped.height - tile_height
+    mapped = []
+    for y, x in ((y, x) for y in positions_y for x in positions_x):
+        x1, y1 = round(x), round(y)
+        x2, y2 = min(cropped.width, round(x + tile_width)), min(cropped.height, round(y + tile_height))
+        tile = cropped.crop((x1, y1, x2, y2))
+        tile_width_actual, tile_height_actual = tile.size
+        detections = run_inference_dfine(tile.resize((RESOLUTION, RESOLUTION), Image.Resampling.BILINEAR))
+        if len(detections) == 0: continue
+        boxes = detections.xyxy.copy().astype(float)
+        boxes[:, [0, 2]] *= tile_width_actual / RESOLUTION
+        boxes[:, [1, 3]] *= tile_height_actual / RESOLUTION
+        boxes[:, [0, 2]] += x1 + left
+        boxes[:, [1, 3]] += y1 + top
+        boxes /= scale
+        mapped.append(sv.Detections(xyxy=boxes, confidence=detections.confidence, class_id=detections.class_id))
+    if not mapped: return sv.Detections.empty()
+    return sv.Detections(xyxy=np.vstack([d.xyxy for d in mapped]), confidence=np.concatenate([d.confidence for d in mapped]), class_id=np.concatenate([d.class_id for d in mapped])).with_nms(IOU_THRESHOLD)
+
+============================================================
+--- Cell 9 ---
+# ══════════════════════════════════════════════════════
+# STEP 8 — Save outputs
+# ══════════════════════════════════════════════════════
+print("--- D-FINE: Adaptive Tiling ---")
+
+MEDIAN_SYMBOL_PX = estimate_median_symbol_px(test_image.width)
+print(f"Median symbol size: {MEDIAN_SYMBOL_PX:.1f}px")
+
+det_adaptive = run_adaptive_tiled_inference(test_image)
+
+result_adaptive = draw_detections(test_image, det_adaptive)
+preview = result_adaptive.copy()
+preview.thumbnail((1200, 1200))
+display(preview)
+
+print(f"Total detections: {len(det_adaptive)}")
+
+============================================================

@@ -19,6 +19,7 @@ export interface ModelInfo {
   estimated_symbol_px?: number;
   enable_auto_crop?: boolean;
   enable_scale_norm?: boolean;
+  target_reference_height?: number;
   iou_threshold: number;
   loaded: boolean;
   weights_exist: boolean;
@@ -33,6 +34,7 @@ export interface Detection {
 export interface ModelDetections {
   class_names: string[];
   detections: Detection[];
+  panels?: any[];
 }
 
 export interface OCRLine {
@@ -44,6 +46,7 @@ export interface InferResponse {
   detections: Record<string, ModelDetections>;
   ocr: OCRLine[] | null;
   ocr_tiles?: [number, number, number, number][] | null;
+  component_tiles?: [number, number, number, number][] | null;
 }
 
 export interface ModelGroup {
@@ -352,7 +355,16 @@ export const useAppStore = create<AppState>((set, get) => ({
 
     const img = new Image();
     img.onload = () => {
-      set({ imageDimensions: { width: img.naturalWidth, height: img.naturalHeight } });
+      const width = img.naturalWidth;
+      const height = img.naturalHeight;
+      const estimatedSymbolPx = Math.round((210.0 * width) / 14044.0);
+      set(state => ({
+        imageDimensions: { width, height },
+        inferSettings: {
+          ...state.inferSettings,
+          estimatedSymbolPx: Math.max(1, estimatedSymbolPx)
+        }
+      }));
     };
     img.src = url;
 

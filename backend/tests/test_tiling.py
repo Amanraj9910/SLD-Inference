@@ -6,7 +6,7 @@ import pytest
 import supervision as sv
 from PIL import Image
 
-from app.tiling import adaptive_tile_image, merge_detections, tile_image
+from app.component.tiling import adaptive_tile_image, merge_detections, tile_image
 
 
 def _solid_image(W: int = 800, H: int = 600, color=(200, 200, 200)) -> Image.Image:

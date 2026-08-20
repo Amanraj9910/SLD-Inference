@@ -1,0 +1,183 @@
+Line 8: auto-cropping, scale normalization, adaptive tiling (resized to 640x640 model resolution),
+Line 22:   9. Scale Normalization (Circuit Breaker -> CT -> Fuse -> Fallback)
+Line 23:  10. Auto Crop White Margins (Bounded by Annotation Envelope)
+Line 24:  11. Adaptive Tiling & Resizing to 640x640 (Empty Tile Removal)
+Line 222:             total=remote_size, unit="B", unit_scale=True, desc=os.path.basename(local_path), leave=False
+Line 486:     "ENABLE_SCALE_NORMALIZATION": True,
+Line 487:     "ENABLE_AUTO_CROP": True,
+Line 489:     "ENABLE_REMOVE_EMPTY_TILES": True,
+Line 492:     # Scale Normalization
+Line 496:     "ENABLE_TILE_QA_SAMPLES": True,  # render sample tiles with boxes drawn, for visual sanity-checking
+Line 498:     "MAX_RESIZED_PIXELS": 150_000_000,  # safety ceiling on scale-norm output size (Fix: OOM guard)
+Line 501:     "MODEL_INPUT_SIZE": 640,           # Native D-FINE tile resolution (640x640)
+Line 502:     "TARGET_SYMBOL_PX": 48,            # Aim for median symbol size to be ~48px in 640x640 tile
+Line 503:     "TILE_OVERLAP": 0.20,              # 20% overlap between tiles
+Line 504:     "MIN_VISIBLE_AREA": 0.50,          # Keep cropped annotation if >=50% area visible
+Line 506:     # Auto Crop Safety
+Line 941: # (Scale Normalization -> Safe Auto Crop -> Adaptive Tiling & 640x640 Resizing)
+Line 944: print("STEP 9-11 — Preprocessing (Scale Norm + Safe Auto-Crop + Adaptive Tiling)")
+Line 952: # memory use after scale normalization, so we disable PIL's blanket pixel-count check.
+Line 967: def compute_scale_factors(coco, class_name_to_id, target_height=60.0):
+Line 976:         print(f"⚠️  Scale-Norm: reference classes {ref_priority} matched NOTHING in this dataset. "
+Line 978:               f"Falling back to 1.0x for every image — scale normalization is OFF this run. "
+Line 982:         print(f"✅ Scale-Norm: using reference class(es) {matched_names} for per-image scale calibration")
+Line 989:     # annotations) were dragging per-image scale factors up to 9-18x, which is almost
+Line 990:     # certainly a labeling error rather than a real physical drawing-scale difference —
+Line 992:     # pixels tall. Filter those out before computing scale, and use median (not mean)
+Line 993:     # so a single remaining outlier annotation can't skew one image's whole scale.
+Line 997:     per_image_scale, with_ref = {}, []
+Line 1012:             scale = target_height / statistics.median(chosen)
+Line 1013:             per_image_scale[iid] = scale
+Line 1014:             with_ref.append(scale)
+Line 1016:             per_image_scale[iid] = None
+Line 1019:         print(f"⚠️  Scale-Norm: {len(flagged_images)} image(s) had reference-class annotations "
+Line 1026:     for iid, f in per_image_scale.items():
+Line 1028:             per_image_scale[iid] = dataset_avg
+Line 1031:     return per_image_scale, {"with_ref": len(with_ref), "fallback": fallback_n, "avg": dataset_avg}
+Line 1102:     # Remove stale tiles from previous runs so the JSON-vs-disk check is clean
+Line 1112:     per_image_scale, scale_stats = compute_scale_factors(
+Line 1122:     n_tiles_total = 0
+Line 1123:     n_tiles_discarded_empty = 0
+Line 1124:     n_tiles_discarded_degenerate = 0
+Line 1138:         # 1. Scale Normalization
+Line 1139:         s = per_image_scale[iid] if PIPELINE_CONFIG["ENABLE_SCALE_NORMALIZATION"] else 1.0
+Line 1143:             cap_scale = (max_px / (im.width * im.height)) ** 0.5
+Line 1144:             print(f"⚠️  [img {iid}] Scale-Norm factor {s:.2f}x on a {im.width}x{im.height} source "
+Line 1146:                   f"Clamping scale to {cap_scale:.2f}x to avoid an out-of-memory kill.")
+Line 1147:             s = min(s, cap_scale)
+Line 1151:         scaled_anns = []
+Line 1156:             scaled_anns.append(new_ann)
+Line 1158:         # 2. Safe Auto Crop (bounded by annotation envelope)
+Line 1159:         if PIPELINE_CONFIG["ENABLE_AUTO_CROP"]:
+Line 1165:             envelope = compute_annotation_envelope(scaled_anns)
+Line 1177:             crop_top = max(0, top - PIPELINE_CONFIG["MIN_MARGIN_PX"])
+Line 1178:             crop_bottom = max(0, bottom - PIPELINE_CONFIG["MIN_MARGIN_PX"])
+Line 1179:             crop_left = max(0, left - PIPELINE_CONFIG["MIN_MARGIN_PX"])
+Line 1180:             crop_right = max(0, right - PIPELINE_CONFIG["MIN_MARGIN_PX"])
+Line 1182:             cx1, cy1 = crop_left, crop_top
+Line 1183:             cx2, cy2 = new_w - crop_right, new_h - crop_bottom
+Line 1185:                 im = im.crop((cx1, cy1, cx2, cy2))
+Line 1186:                 cropped_anns = []
+Line 1187:                 for ann in scaled_anns:
+Line 1194:                         cropped_anns.append(new_ann)
+Line 1196:                 cropped_anns = scaled_anns
+Line 1198:             cropped_anns = scaled_anns
+Line 1201:         med_px = median_symbol_size(cropped_anns)
+Line 1211:         overlap = PIPELINE_CONFIG["TILE_OVERLAP"]
+Line 1212:         tile_w = im.width / (g_x - (g_x - 1) * overlap) if g_x > 1 else im.width
+Line 1213:         tile_h = im.height / (g_y - (g_y - 1) * overlap) if g_y > 1 else im.height
+Line 1214:         stride_x = tile_w * (1 - overlap) if g_x > 1 else im.width
+Line 1215:         stride_y = tile_h * (1 - overlap) if g_y > 1 else im.height
+Line 1217:         # Build tile positions with edge-anchored last tile (Fix 2.3)
+Line 1220:             positions_x[-1] = max(0, im.width - tile_w)  # anchor last tile to right edge
+Line 1223:             positions_y[-1] = max(0, im.height - tile_h)  # anchor last tile to bottom edge
+Line 1225:         tiles = [
+Line 1226:             (px, py, min(im.width, px + tile_w), min(im.height, py + tile_h))
+Line 1230:         for tx1_f, ty1_f, tx2_f, ty2_f in tiles:
+Line 1231:             # Issue 3: Round tile coordinates ONCE; use the same integers
+Line 1232:             # for clipping, cropping, and annotation translation.
+Line 1238:                 n_tiles_discarded_degenerate += 1
+Line 1241:             tile_anns = []
+Line 1242:             for ann in cropped_anns:
+Line 1251:                     tile_anns.append(new_ann)
+Line 1253:             if PIPELINE_CONFIG["ENABLE_REMOVE_EMPTY_TILES"] and not tile_anns:
+Line 1254:                 n_tiles_discarded_empty += 1
+Line 1257:             tile_img = im.crop((tx1, ty1, tx2, ty2))
+Line 1258:             tw, th = tile_img.size
+Line 1260:                 n_tiles_discarded_degenerate += 1
+Line 1263:             # Resize tile to uniform model resolution (640x640)
+Line 1264:             tile_img = tile_img.resize((target_size, target_size), Image.Resampling.BILINEAR)
+Line 1267:             tile_fname = f"img{iid}_tile{n_tiles_total:05d}.png"
+Line 1268:             if tile_fname in saved_filenames:
+Line 1269:                 raise RuntimeError(f"Duplicate tile filename: {tile_fname}")
+Line 1270:             tile_out_path = os.path.join(dst_dir, tile_fname)
+Line 1271:             save_image_smart(tile_img, tile_out_path)
+Line 1273:             if not os.path.isfile(tile_out_path):
+Line 1274:                 raise IOError(f"Tile save failed — file not found after write: {tile_out_path}")
+Line 1276:                 with Image.open(tile_out_path) as _vimg:
+Line 1279:                 os.remove(tile_out_path)
+Line 1280:                 raise RuntimeError(f"Corrupt tile image {tile_fname}: {e}")
+Line 1281:             with Image.open(tile_out_path) as _cimg:
+Line 1284:                         f"Tile {tile_fname} saved as {_cimg.width}x{_cimg.height}, "
+Line 1286:             saved_filenames.add(tile_fname)
+Line 1290:                 "file_name": tile_fname,
+Line 1295:             for ann in tile_anns:
+Line 1327:             n_tiles_total += 1
+Line 1441:     print(f"  Tiles generated          : {n_tiles_total}")
+Line 1442:     print(f"  Tiles discarded (empty)  : {n_tiles_discarded_empty}")
+Line 1443:     print(f"  Tiles discarded (degen)  : {n_tiles_discarded_degenerate}")
+Line 1447:     print(f"  Scale-Norm               : {scale_stats['with_ref']} ref, "
+Line 1448:           f"{scale_stats['fallback']} fallback (avg {scale_stats['avg']:.3f}x)")
+Line 1453: def save_tile_qa_samples(split, dst_dir, out_coco, n_samples=12, seed=42):
+Line 1454:     """Validation layer for tiling: render a random sample of generated tiles with
+Line 1456:     confirmed before spending GPU time training on them. Prefers tiles that actually
+Line 1485:     print(f"[{split}] Saved {len(sample)} annotated QA sample tiles to {qa_dir} — "
+Line 1493:     if PIPELINE_CONFIG.get("ENABLE_TILE_QA_SAMPLES", True):
+Line 1496:         save_tile_qa_samples(split, os.path.join(PROCESSED_DIR, split), _qa_coco,
+Line 1544:         f"This likely means preprocessing (crop/tile) deleted all instances of these classes."
+Line 1685: print(f"Original Tiles     : {balance_stats['original']}")
+Line 1690: print("Processed tiled dataset stored locally (OneDrive sync disabled for processed data).")
+Line 1691: print(f"✅ Tiled dataset ready at local path: '{PROCESSED_DIR}'\n")
+Line 1746: SCALED_LR = BASE_LR_AT_BATCH32 * (TOTAL_BATCH_SIZE / 32)
+Line 1747: SCALED_WD = BASE_WD
+Line 1750: print(f"Main LR          : {SCALED_LR:.2e}")
+Line 1751: print(f"Backbone LR      : {SCALED_LR * BACKBONE_LR_RATIO:.2e}")
+Line 1752: print(f"Weight Decay     : {SCALED_WD:.2e}\n")
+Line 1764:     {"type": "RandomIoUCrop", "p": 0.8},
+Line 1769:     {"type": "ConvertPILImage", "dtype": "float32", "scale": True},
+Line 1780:             {"params": "^(?=.*backbone)(?!.*norm|bn).*$", "lr": SCALED_LR * BACKBONE_LR_RATIO},
+Line 1783:         "lr": SCALED_LR,
+Line 1785:         "weight_decay": SCALED_WD,
+Line 2090:     "main_lr": SCALED_LR,
+Line 2091:     "backbone_lr": SCALED_LR * BACKBONE_LR_RATIO,
+Line 2092:     "weight_decay": SCALED_WD,
+Line 2115: # FIX 2.8 — Full-Sheet Inference Utility (Tile + Predict + Stitch + NMS)
+Line 2119: print("Defining infer_full_sheet() — full-sheet tiled inference utility")
+Line 2157:     dataset_avg_scale=1.0,
+Line 2160:     tile_overlap=None,
+Line 2165:     Full-sheet SLD inference: scale-normalize -> tile (edge-anchored, Fix 2.3) ->
+Line 2166:     predict per tile -> map back to full-sheet coordinates -> cross-tile NMS.
+Line 2168:     Per the Fix 2.4 note: the annotation-envelope safety-margin crop used during
+Line 2171:     the full sheet is tiled including any border/legend area; those tiles
+Line 2176:         model_predict_fn: callable(PIL.Image tile) -> list of dicts, each
+Line 2178:             TILE-LOCAL pixel coordinates (model_input_size x model_input_size
+Line 2180:             closure and pass it here — this function only handles scale
+Line 2182:         reference_priority: class names used for scale calibration (defaults
+Line 2186:         dataset_avg_scale: fallback scale factor when no reference-class
+Line 2188:             scale_stats['avg'] value recorded in training_config_*.json.
+Line 2190:         nms_iou_threshold: IoU threshold for cross-tile duplicate suppression.
+Line 2200:     tile_overlap = PIPELINE_CONFIG["TILE_OVERLAP"] if tile_overlap is None else tile_overlap
+Line 2207:     # ---- Step A: quick calibration pass for scale normalization ----
+Line 2210:     # mirrors the training-time compute_scale_factors() logic, but since there
+Line 2213:     calib_tile = orig_im.resize((model_input_size, model_input_size), Image.Resampling.BILINEAR)
+Line 2217:         for d in model_predict_fn(calib_tile)
+Line 2222:         scale = target_reference_height / measured_height if measured_height > 0 else 1.0
+Line 2225:         # back to the dataset-average scale observed during training.
+Line 2226:         scale = dataset_avg_scale
+Line 2228:     new_w, new_h = max(32, round(orig_w * scale)), max(32, round(orig_h * scale))
+Line 2242:     tile_w = im.width / (g_x - (g_x - 1) * tile_overlap) if g_x > 1 else im.width
+Line 2243:     tile_h = im.height / (g_y - (g_y - 1) * tile_overlap) if g_y > 1 else im.height
+Line 2244:     stride_x = tile_w * (1 - tile_overlap) if g_x > 1 else im.width
+Line 2245:     stride_y = tile_h * (1 - tile_overlap) if g_y > 1 else im.height
+Line 2249:         positions_x[-1] = max(0, im.width - tile_w)  # edge-anchor last column
+Line 2252:         positions_y[-1] = max(0, im.height - tile_h)  # edge-anchor last row
+Line 2254:     tiles = [
+Line 2255:         (px, py, min(im.width, px + tile_w), min(im.height, py + tile_h))
+Line 2259:     # ---- Step C: predict per tile, map tile-local -> original full-sheet coords ----
+Line 2261:     for tx1, ty1, tx2, ty2 in tiles:
+Line 2262:         tile_img = im.crop((round(tx1), round(ty1), round(tx2), round(ty2)))
+Line 2263:         tw, th = tile_img.size
+Line 2264:         tile_img_resized = tile_img.resize((model_input_size, model_input_size), Image.Resampling.BILINEAR)
+Line 2265:         sx, sy = tw / model_input_size, th / model_input_size  # model space -> scale-normalized-sheet space
+Line 2267:         for d in model_predict_fn(tile_img_resized):
+Line 2271:             # tile-local (model space) -> scale-normalized sheet -> ORIGINAL sheet
+Line 2272:             fx = (tx1 + x * sx) / scale
+Line 2273:             fy = (ty1 + y * sy) / scale
+Line 2274:             fw = (w * sx) / scale
+Line 2275:             fh = (h * sy) / scale
+Line 2282:     # ---- Step D: cross-tile class-aware NMS ----
+Line 2293:     print(f"[infer_full_sheet] {os.path.basename(image_path)}: {len(tiles)} tiles, "
+Line 2294:           f"{len(all_dets)} raw detections -> {len(final_dets)} after NMS (scale={scale:.3f}x)")
+Line 2299: print("   Usage: infer_full_sheet(image_path, model_predict_fn, dataset_avg_scale=<scale_stats_avg>)")
+Line 2300: print("   where model_predict_fn(tile_image) runs your loaded D-FINE checkpoint on one 640x640 tile")
+Line 2301: print("   and returns [{'bbox': [x,y,w,h], 'score': float, 'category_id': int}, ...] in tile-local coords.")
